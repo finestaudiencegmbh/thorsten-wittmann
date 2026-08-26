@@ -29,12 +29,56 @@ const normKey = (s) =>
     .trim()
     .toLowerCase();
 
+/**
+ * Gehoert ein Kampagnenname zu diesem Funnel? Der Meta-Spend kennt die
+ * Sheet-Tabs nicht, deshalb laeuft die Zuordnung hier ueber den Namen
+ * (z. B. "DP | CCC | ABO | 190826" -> Funnel CCC).
+ */
+function matchesFunnel(name, funnel) {
+  const hay = normKey(name);
+  if (!hay) return false;
+  return (funnel.match && funnel.match.length ? funnel.match : [funnel.id])
+    .some((p) => hay.includes(String(p).toLowerCase()));
+}
+
+/**
+ * Reduziert die Meta-Daten auf einen Funnel. Bewusst als VORFILTER gebaut:
+ * die eigentliche Attributions- und Hierarchielogik dahinter bleibt
+ * unveraendert und rechnet auf dem verkleinerten Datensatz weiter.
+ */
+function filterMetaByFunnel(meta, funnel) {
+  const m = meta || {};
+  const keep = (name) => matchesFunnel(name, funnel);
+  const dailyEntities = (m.dailyEntities || []).filter((d) => keep(d.campaign));
+  // Konto-Tagesreihe aus den gefilterten Kampagnen-Tageswerten neu aufbauen -
+  // die Original-Reihe ist kontoweit und waere fuer einen Funnel zu hoch.
+  const dailyMap = new Map();
+  for (const d of dailyEntities) {
+    const e = dailyMap.get(d.date) || { date: d.date, spend: 0, impressions: 0, clicks: 0 };
+    e.spend += d.spend || 0;
+    e.impressions += d.impressions || 0;
+    e.clicks += d.clicks || 0;
+    dailyMap.set(d.date, e);
+  }
+  const pickKeys = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => keep(k)));
+  return {
+    ...m,
+    entities: (m.entities || []).filter((e) => keep(e.campaign)),
+    adList: (m.adList || []).filter((a) => keep(a.campaign)),
+    dailyEntities,
+    daily: [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    campaignStatus: pickKeys(m.campaignStatus),
+  };
+}
+
 function emptyMetrics() {
   return { spend: 0, impressions: 0, clicks: 0, uoc: 0, leads: 0, tickets: 0, scoreSum: 0, scored: 0, qualified: 0 };
 }
 
 /** Leitet die abgeleiteten Kennzahlen aus den Rohsummen ab. */
-function derive(m) {
+function derive(m, features = {}) {
+  const hasTickets = features.hasTickets !== false;
+  const hasQuality = features.hasQuality !== false;
   const cpm = m.impressions ? m.spend / (m.impressions / 1000) : null;
   const outboundCtr = m.impressions ? m.uoc / m.impressions : null; // individuell ausgehende CTR
   const cpoc = m.uoc ? m.spend / m.uoc : null; // individueller ausgehender Klickpreis
@@ -49,14 +93,18 @@ function derive(m) {
     outboundCtr,
     cpoc: round2(cpoc),
     leads: m.leads,
-    tickets: m.tickets,
     cpl: round2(cpl),
-    cpt: round2(cpt),
     lpConversion,
     cvrStart: lpConversion,
-    cvrTicket: m.leads ? m.tickets / m.leads : null, // Lead -> Ticket
-    avgQuality: m.scored ? Math.round(m.scoreSum / m.scored) : null,
-    qualifiedRate: m.tickets ? m.qualified / m.tickets : null,
+    ...(hasTickets ? {
+      tickets: m.tickets,
+      cpt: round2(cpt),
+      cvrTicket: m.leads ? m.tickets / m.leads : null, // Lead -> Ticket
+    } : {}),
+    ...(hasQuality ? {
+      avgQuality: m.scored ? Math.round(m.scoreSum / m.scored) : null,
+      qualifiedRate: m.tickets ? m.qualified / m.tickets : null,
+    } : {}),
   };
 }
 
@@ -81,6 +129,12 @@ function pathKey(dim, { campaign, adset, creative }) {
  * @param {array}  leads  Lead-Records aus buildDataset (mit campaign/adset/creative, wonAt, hasTicket)
  */
 export function combineMetaWithLeads(meta, leads, opts = {}) {
+  const { funnel = null, features = {} } = opts;
+  // Funnel-Sicht: Leads ueber den Sheet-Tab, Meta-Daten ueber den Kampagnennamen.
+  if (funnel) {
+    meta = filterMetaByFunnel(meta, funnel);
+    leads = (leads || []).filter((l) => l.funnel === funnel.id);
+  }
   const { entities = [], daily = [], dailyEntities = [], campaignStatus = {}, adsetStatus = {}, adStatus = {}, adList = [] } = meta || {};
 
   // Alle Ads je Anzeigengruppen-PFAD (Kampagne ▸ Anzeigengruppe), damit Anzeigen
@@ -238,7 +292,7 @@ export function combineMetaWithLeads(meta, leads, opts = {}) {
       qualified: adLeads.qualified,
     };
     const adActive = resolveAdActive(e.campaign, e.adset, e.creative);
-    a.ads.push({ id: e.adId, name: e.creative, level: 'ad', active: adActive, ...derive(adM) });
+    a.ads.push({ id: e.adId, name: e.creative, level: 'ad', active: adActive, ...derive(adM, features) });
 
     // FB-Summen nach oben aggregieren
     for (const node of [a._m, c._m]) {
@@ -274,7 +328,7 @@ export function combineMetaWithLeads(meta, leads, opts = {}) {
         if (existingAdKeys.has(normKey(ad.name))) continue;
         existingAdKeys.add(normKey(ad.name));
         const adM = { spend: 0, impressions: 0, clicks: 0, uoc: 0, ...lookupLeads('creative', { campaign: c.name, adset: a.name, creative: ad.name }) };
-        a.ads.push({ id: ad.id, name: ad.name, level: 'ad', active: ad.active, ...derive(adM) });
+        a.ads.push({ id: ad.id, name: ad.name, level: 'ad', active: ad.active, ...derive(adM, features) });
       }
       // Creatives, die NUR im Sheet vorkommen (Leads vorhanden, aber weder in den
       // FB-Insights noch in Metas Ad-Liste) – mit ihren Lead-Kennzahlen ergänzen.
@@ -282,18 +336,18 @@ export function combineMetaWithLeads(meta, leads, opts = {}) {
         if (existingAdKeys.has(ck)) continue;
         existingAdKeys.add(ck);
         const adM = { spend: 0, impressions: 0, clicks: 0, uoc: 0, ...lookupLeads('creative', { campaign: c.name, adset: a.name, creative: cname }) };
-        a.ads.push({ id: `sheet:${ck}`, name: cname, level: 'ad', active: resolveAdActive(c.name, a.name, cname), ...derive(adM) });
+        a.ads.push({ id: `sheet:${ck}`, name: cname, level: 'ad', active: resolveAdActive(c.name, a.name, cname), ...derive(adM, features) });
       }
       adsets.push({
         id: a.id, name: a.name, level: 'adset', active: a.active, status: a.status,
-        ...derive(a._m),
+        ...derive(a._m, features),
         ads: a.ads.sort((x, y) => y.spend - x.spend),
       });
     }
     result.push({
       id: c.id, name: c.name, account: c.account, level: 'campaign', active: c.active, status: c.status,
       objective: c.objective, leadCampaign: c.leadCampaign,
-      ...derive(c._m),
+      ...derive(c._m, features),
       adsets: adsets.sort((x, y) => y.spend - x.spend),
     });
   }

@@ -4,11 +4,17 @@
  * Das Sheet besteht aus mehreren Tabs/Tabellen. Statt fixe Tab-Namen
  * vorauszusetzen, erkennt der Parser jede Tabelle an ihrer Kopfzeile.
  * Dadurch bleibt er stabil, auch wenn Tabs umbenannt oder verschoben werden.
+ *
+ * Welche Spaltennamen zu welchem Feld gehören, steht in project.config.json
+ * (sheet.leadColumns / ticketColumns / questionnaireColumns / overviewColumns).
+ * Jedes Feld akzeptiert mehrere Schreibweisen – so liest derselbe Parser
+ * Sheets verschiedener Projekte.
  */
+import { DEFAULT_CONFIG } from './project-config.js';
 
 const norm = (s) =>
   String(s ?? '')
-    .replace(/ /g, ' ')
+    .replace(/ /g, ' ')
     .trim();
 
 const key = (s) =>
@@ -18,17 +24,44 @@ const key = (s) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-/** Erkennt anhand einer Kopfzeile, um welchen Tabellentyp es sich handelt. */
-function classifyHeader(cells) {
-  const set = new Set(cells.map(key));
-  const has = (...keys) => keys.every((k) => set.has(k));
-  const some = (...keys) => keys.some((k) => set.has(k));
+/**
+ * Manche Sheets speichern UTM-Werte URL-kodiert: "CCC+EWeb+|+CBO" statt
+ * "CCC EWeb | CBO". Die Meta-API liefert echte Leerzeichen – ohne Rückwandlung
+ * matcht die Attribution nicht und die Zahlen wären still falsch.
+ */
+const decodePlus = (s) => norm(s).replace(/\+/g, ' ').replace(/\s+/g, ' ').trim();
 
-  if (has('anzeigengruppe', 'adspend')) return 'overview';
-  if (some('monatliches einkommen', 'immobilien im besitz') || has('teilgenommen am', 'vorname')) {
-    return 'tickets';
+/** Liest den ersten belegten Wert aus allen konfigurierten Spalten-Aliassen. */
+function pick(obj, aliases) {
+  for (const a of aliases || []) {
+    const v = obj[key(a)];
+    if (v !== undefined && v !== '') return v;
   }
-  if (has('gewonnen am') && some('utm_source', 'e-mail')) return 'leads';
+  return '';
+}
+
+/** Erkennt anhand einer Kopfzeile, um welchen Tabellentyp es sich handelt. */
+function classifyHeader(cells, cfg = DEFAULT_CONFIG) {
+  const set = new Set(cells.map(key));
+  const sheet = cfg.sheet || DEFAULT_CONFIG.sheet;
+  const features = cfg.features || DEFAULT_CONFIG.features;
+  // Trifft mindestens einer der konfigurierten Aliasse dieses Feldes?
+  const hasField = (aliases) => (aliases || []).some((a) => set.has(key(a)));
+
+  const ov = sheet.overviewColumns || {};
+  if (hasField(ov.adset) && hasField(ov.adspend)) return 'overview';
+
+  if (features.hasTickets) {
+    const tc = sheet.ticketColumns || {};
+    const qc = sheet.questionnaireColumns || {};
+    // Ein Fragebogen-Tab erkennt man an den Antwortspalten oder an
+    // "Teilgenommen am" + Vorname.
+    const hasAnswerCol = Object.values(qc).some((aliases) => hasField(aliases));
+    if (hasAnswerCol || (hasField(tc.at) && hasField(tc.firstName))) return 'tickets';
+  }
+
+  const lc = sheet.leadColumns || {};
+  if (hasField(lc.wonAt) && (hasField(lc.utmSource) || hasField(lc.email))) return 'leads';
   return null;
 }
 
@@ -64,7 +97,7 @@ const normEmail = (s) => norm(s).toLowerCase();
  * untereinander gestapelte Tabellen enthalten (z. B. die Anzeigengruppen-
  * Übersicht mit mehreren Kampagnen).
  */
-function* iterateTables(rows) {
+function* iterateTables(rows, cfg = DEFAULT_CONFIG) {
   let header = null;
   let type = null;
   let body = [];
@@ -73,7 +106,7 @@ function* iterateTables(rows) {
     return null;
   };
   for (const row of rows) {
-    const t = classifyHeader(row.map(norm).filter(Boolean).length >= 2 ? row : []);
+    const t = classifyHeader(row.map(norm).filter(Boolean).length >= 2 ? row : [], cfg);
     if (t) {
       const prev = flush();
       if (prev) yield prev;
@@ -106,68 +139,94 @@ const num = (s) => {
   return Number.isFinite(n) ? n : null;
 };
 
-function parseOverviewRow(o) {
-  const adset = norm(o['anzeigengruppe']);
+/**
+ * Ordnet einen Tab-Titel einem Funnel zu (z. B. Tab "Leads CCC" -> Funnel CCC).
+ * Der Tab ist die verlässlichste Quelle: Leads aus Reoptin-Mails, Newslettern
+ * oder Google Ads tragen oft gar kein Funnel-Kürzel in den UTM-Werten.
+ */
+export function funnelForTab(title, cfg = DEFAULT_CONFIG) {
+  const t = key(title);
+  if (!t) return null;
+  for (const f of cfg.funnels || []) {
+    const needle = key(f.sheetTab || f.id);
+    if (needle && t.includes(needle)) return f.id;
+  }
+  return null;
+}
+
+function parseOverviewRow(o, cols) {
+  const adset = norm(pick(o, cols.adset));
   if (!adset) return null;
   return {
-    status: norm(o['status']),
+    status: norm(pick(o, cols.status)),
     adset,
-    adspend: num(o['adspend']),
-    clicks: num(o['ausg klicks'] ?? o['klicks']),
-    cpc: num(o['cpc']),
-    cvrOptin: num(o['cvr optin']),
-    cvrTicket: num(o['cvr ticket']),
-    cpl: num(o['cpl']),
-    leads: num(o['leads']),
-    tickets: num(o['vip ticket']),
-    ticketsQualified: num(o['ticket qualifiziert']),
-    ticketsUnqualified: num(o['ticket nicht qualifiziert']),
+    adspend: num(pick(o, cols.adspend)),
+    clicks: num(pick(o, cols.clicks)),
+    cpc: num(pick(o, cols.cpc)),
+    cvrOptin: num(pick(o, cols.cvrOptin)),
+    cvrTicket: num(pick(o, cols.cvrTicket)),
+    cpl: num(pick(o, cols.cpl)),
+    leads: num(pick(o, cols.leads)),
+    tickets: num(pick(o, cols.tickets)),
+    ticketsQualified: num(pick(o, cols.ticketsQualified)),
+    ticketsUnqualified: num(pick(o, cols.ticketsUnqualified)),
   };
 }
 
-function parseLeadRow(o) {
-  const wonAt = parseDate(o['gewonnen am']);
+function parseLeadRow(o, cfg) {
+  const sheet = cfg.sheet || DEFAULT_CONFIG.sheet;
+  const cols = sheet.leadColumns || {};
+  const utmVal = sheet.decodePlusAsSpace ? decodePlus : norm;
+  const wonAt = parseDate(pick(o, cols.wonAt));
   if (!wonAt) return null; // Zähl-/Summenzeilen ohne gültiges Datum überspringen
   return {
     wonAt,
-    firstName: norm(o['vorname']),
-    lastName: norm(o['nachname']),
-    email: normEmail(o['e-mail']),
+    firstName: norm(pick(o, cols.firstName)),
+    lastName: norm(pick(o, cols.lastName)),
+    email: normEmail(pick(o, cols.email)),
     utm: {
-      source: norm(o['utm_source']),
-      medium: norm(o['utm_medium']),
-      campaign: norm(o['utm_campaign']),
-      term: norm(o['utm_term']),
+      source: utmVal(pick(o, cols.utmSource)),
+      medium: utmVal(pick(o, cols.utmMedium)),
+      campaign: utmVal(pick(o, cols.utmCampaign)),
+      term: utmVal(pick(o, cols.utmTerm)),
+      content: utmVal(pick(o, cols.utmContent)),
     },
-    ticketAt: parseDate(o['vip-ticket geholt am']),
+    ticketAt: cfg.features?.hasTickets ? parseDate(pick(o, cols.ticketAt)) : null,
   };
 }
 
-function parseTicketRow(o) {
-  const at = parseDate(o['teilgenommen am']);
-  const email = normEmail(o['e-mail (funnelcockpit)'] || o['e-mail (typeform)'] || o['e-mail']);
+function parseTicketRow(o, cfg) {
+  const sheet = cfg.sheet || DEFAULT_CONFIG.sheet;
+  const cols = sheet.ticketColumns || {};
+  const lead = sheet.leadColumns || {};
+  const utmVal = sheet.decodePlusAsSpace ? decodePlus : norm;
+  const at = parseDate(pick(o, cols.at));
+  const email = normEmail(pick(o, cols.email));
   if (!at && !email) return null;
+
+  // Fragebogen-Antworten: logischer Name -> konfigurierte Sheet-Spalte.
+  // Nur befüllen, wenn das Scoring überhaupt aktiv ist.
+  const answers = {};
+  if (cfg.features?.hasQuality) {
+    for (const [field, aliases] of Object.entries(sheet.questionnaireColumns || {})) {
+      answers[field] = norm(pick(o, aliases));
+    }
+  }
+
   return {
     at,
-    firstName: norm(o['vorname']),
-    lastName: norm(o['nachname']),
+    firstName: norm(pick(o, cols.firstName)),
+    lastName: norm(pick(o, cols.lastName)),
     email,
-    emailTypeform: normEmail(o['e-mail (typeform)']),
-    phone: norm(o['handynummer']),
-    answers: {
-      employment: norm(o['angestellt selbstständig oder unternehmer']),
-      challenge: norm(o['größte herausforderung im vermögensaufbau']),
-      income: norm(o['monatliches einkommen']),
-      realEstate: norm(o['immobilien im besitz']),
-      invested: norm(o['geld investiert in den vermögensaufbau wenn ja wie viel']),
-      relationship: norm(o['beziehungsstand']),
-      expectation: norm(o['was erhoffst du dir von den 4 abenden']),
-    },
+    emailTypeform: normEmail(pick(o, cols.emailAlt)),
+    phone: norm(pick(o, cols.phone)),
+    answers,
     utm: {
-      source: norm(o['utm_source']),
-      medium: norm(o['utm_medium']),
-      campaign: norm(o['utm_campaign']),
-      term: norm(o['utm_term']),
+      source: utmVal(pick(o, lead.utmSource)),
+      medium: utmVal(pick(o, lead.utmMedium)),
+      campaign: utmVal(pick(o, lead.utmCampaign)),
+      term: utmVal(pick(o, lead.utmTerm)),
+      content: utmVal(pick(o, lead.utmContent)),
     },
   };
 }
@@ -176,32 +235,37 @@ function parseTicketRow(o) {
  * Hauptfunktion: bekommt die Tabs als [{title, values}] und liefert
  * { leads, tickets, overview, warnings }.
  */
-export function parseSheets(sheets) {
+export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
   const leads = [];
   const tickets = [];
   const overview = [];
   const warnings = [];
   const seenTickets = new Set();
+  const hasTickets = Boolean(cfg.features?.hasTickets);
+  const overviewCols = (cfg.sheet || DEFAULT_CONFIG.sheet).overviewColumns || {};
 
   for (const sheet of sheets) {
     const rows = sheet.values || [];
-    for (const table of iterateTables(rows)) {
+    // Der Tab bestimmt den Funnel – nicht der Kampagnenname.
+    const funnel = funnelForTab(sheet.title, cfg);
+    for (const table of iterateTables(rows, cfg)) {
       for (const row of table.body) {
         const o = rowToObj(table.header, row);
         if (table.type === 'overview') {
-          const r = parseOverviewRow(o);
-          if (r) overview.push(r);
+          const r = parseOverviewRow(o, overviewCols);
+          if (r) overview.push({ ...r, funnel });
         } else if (table.type === 'leads') {
-          const r = parseLeadRow(o);
-          if (r) leads.push(r);
+          const r = parseLeadRow(o, cfg);
+          if (r) leads.push({ ...r, funnel });
         } else if (table.type === 'tickets') {
-          const r = parseTicketRow(o);
+          if (!hasTickets) continue;
+          const r = parseTicketRow(o, cfg);
           if (!r) continue;
           // Dedupe (das Sheet enthält teils zwei Ticket-Tabs)
           const dk = `${r.email}|${r.at || ''}`;
           if (seenTickets.has(dk)) continue;
           seenTickets.add(dk);
-          tickets.push(r);
+          tickets.push({ ...r, funnel });
         }
       }
     }
@@ -210,4 +274,4 @@ export function parseSheets(sheets) {
   return { leads, tickets, overview, warnings };
 }
 
-export const _internal = { classifyHeader, key, num, parseDate, iterateTables };
+export const _internal = { classifyHeader, key, num, parseDate, iterateTables, decodePlus, pick };

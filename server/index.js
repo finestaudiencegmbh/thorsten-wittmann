@@ -13,6 +13,7 @@ import { isSupermetricsConfigured, fetchFbInsights, aggregateFb } from './superm
 import { isMetaConfigured, fetchMetaAll } from './meta.js';
 import { combineMetaWithLeads } from './combine.js';
 import { isChatConfigured, buildContext, chat } from './chat.js';
+import { loadProjectConfig, publicConfig } from './project-config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -21,6 +22,10 @@ const PORT = process.env.PORT || 3000;
 // kostet keine Meta-Calls (schont das API-Rate-Limit). Der „Aktualisieren"-
 // Button (refresh=1) umgeht den Cache und holt immer frische Daten.
 const CACHE_TTL = (Number(process.env.CACHE_TTL_SECONDS) || 900) * 1000;
+
+const PROJECT = loadProjectConfig();
+const FEATURES = PROJECT.features || {};
+const FUNNELS = PROJECT.funnels || [];
 
 const app = express();
 app.use(express.json());
@@ -39,7 +44,7 @@ if (AUTH_USER && AUTH_PASS) {
       const [u, p] = Buffer.from(encoded, 'base64').toString().split(':');
       if (u === AUTH_USER && p === AUTH_PASS) return next();
     }
-    res.set('WWW-Authenticate', 'Basic realm="MMV Dashboard"');
+    res.set('WWW-Authenticate', `Basic realm="${PROJECT.name || 'Dashboard'}"`);
     return res.status(401).send('Authentifizierung erforderlich.');
   });
 }
@@ -58,13 +63,13 @@ async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
   let source;
   if (isConfigured()) {
     const sheets = await fetchAllSheets();
-    parsed = parseSheets(sheets);
+    parsed = parseSheets(sheets, PROJECT);
     source = 'google';
   } else {
     parsed = getSampleParsed();
     source = 'demo';
   }
-  const dataset = buildDataset(parsed, cfg);
+  const dataset = buildDataset(parsed, cfg, PROJECT);
 
   // Facebook-Ads-Daten: bevorzugt direkt über die Meta Marketing API,
   // alternativ über Supermetrics. Fehler hier dürfen das Sheet-Dashboard
@@ -81,8 +86,21 @@ async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
       const leadsInRange = filterLeadsByRange(dataset.leads, from, to);
       // Stunden-Raster, wenn genau ein Tag gewählt ist
       const hourlyDay = from && to && from === to ? from : null;
-      const combined = combineMetaWithLeads(all, leadsInRange, { hourlyDay });
-      fb = { configured: true, provider: 'meta', error: null, fetchedAt: new Date().toISOString(), ...agg, hierarchy: combined.hierarchy, daily: combined.daily, totals: combined.totals, nonLeadCampaigns: combined.nonLeadCampaigns, uocByDim: combined.uocByDim, dimMeta: combined.dimMeta, dailyByEntity: combined.dailyByEntity, intradayByEntity: combined.intradayByEntity, intradayDay: combined.intradayDay, accounts: all.accounts, accountsRequested: all.accountsRequested, accountErrors: all.accountErrors };
+      const combined = combineMetaWithLeads(all, leadsInRange, { hourlyDay, features: FEATURES });
+      // Pro Funnel dieselbe Auswertung auf dem gefilterten Datensatz. Das
+      // Hauptdashboard zeigt weiterhin die Summe ueber alle Funnels.
+      const funnelViews = {};
+      for (const f of FUNNELS) {
+        const c = combineMetaWithLeads(all, leadsInRange, { hourlyDay, features: FEATURES, funnel: f });
+        funnelViews[f.id] = {
+          label: f.label || f.id,
+          hierarchy: c.hierarchy, daily: c.daily, totals: c.totals,
+          nonLeadCampaigns: c.nonLeadCampaigns, uocByDim: c.uocByDim, dimMeta: c.dimMeta,
+          dailyByEntity: c.dailyByEntity, intradayByEntity: c.intradayByEntity, intradayDay: c.intradayDay,
+          leads: leadsInRange.filter((l) => l.funnel === f.id).length,
+        };
+      }
+      fb = { configured: true, provider: 'meta', error: null, fetchedAt: new Date().toISOString(), ...agg, funnels: funnelViews, hierarchy: combined.hierarchy, daily: combined.daily, totals: combined.totals, nonLeadCampaigns: combined.nonLeadCampaigns, uocByDim: combined.uocByDim, dimMeta: combined.dimMeta, dailyByEntity: combined.dailyByEntity, intradayByEntity: combined.intradayByEntity, intradayDay: combined.intradayDay, accounts: all.accounts, accountsRequested: all.accountsRequested, accountErrors: all.accountErrors };
     } catch (err) {
       console.error('Meta-Fehler:', err.message);
       fb.error = err.message;
@@ -102,7 +120,10 @@ async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
     source,
     fetchedAt: new Date().toISOString(),
     range: range || null,
-    scoring: { weights: cfg.weights, tiers: cfg.tiers },
+    // Die Frontend-relevanten Teile von project.config.json reisen im Payload
+    // mit, damit Build und Laufzeit nicht auseinanderlaufen koennen.
+    config: publicConfig(PROJECT),
+    ...(FEATURES.hasQuality ? { scoring: { weights: cfg.weights, tiers: cfg.tiers } } : {}),
     fb,
     ...dataset,
   };

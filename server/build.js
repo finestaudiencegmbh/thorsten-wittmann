@@ -1,5 +1,6 @@
 import { computeQuality } from './scoring.js';
 import { loadCampaignConfig } from './campaigns.js';
+import { DEFAULT_CONFIG } from './project-config.js';
 
 const collapse = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 
@@ -51,6 +52,33 @@ function isOrganicSource(utm, patterns) {
 }
 
 /**
+ * Ordnet einen Lead einer konfigurierten Traffic-Quelle zu (z. B. Meta, Google).
+ * Gematcht wird gegen utm_source, ersatzweise gegen medium/campaign.
+ * Liefert null, wenn keine Quelle greift -> Fallback auf die Pipe-Heuristik.
+ */
+function classifyTrafficSource(utm, sources) {
+  if (!sources || !sources.length) return null;
+  const src = collapse(utm.source).toLowerCase();
+  const hay = [utm.source, utm.medium, utm.campaign].map((v) => collapse(v).toLowerCase()).join(' | ');
+  for (const s of sources) {
+    for (const pat of s.match || []) {
+      const p = String(pat).toLowerCase();
+      if (!p) continue;
+      // utm_source hat Vorrang: "googled"/"googleg" sollen auf "google" matchen,
+      // ohne dass ein Kampagnenname mit "google" darin alles einfaengt.
+      if (src.includes(p)) return s;
+    }
+  }
+  for (const s of sources) {
+    for (const pat of s.match || []) {
+      const p = String(pat).toLowerCase();
+      if (p && hay.includes(p)) return s;
+    }
+  }
+  return null;
+}
+
+/**
  * Entscheidet, ob ein Datensatz aus bezahlter Werbung stammt.
  * Bezahlte Anzeigengruppen folgen dem Schema "X | Y | Z | ..." und/oder
  * tauchen in der Adspend-Übersicht auf. Alles andere gilt als organisch.
@@ -74,8 +102,13 @@ function isPaid(utm, paidAdsets, patterns) {
  * Führt Leads, VIP-Tickets und Adspend-Übersicht zu einem einheitlichen
  * Datensatz zusammen. Join über die E-Mail-Adresse.
  */
-export function buildDataset({ leads, tickets, overview }, cfg) {
+export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEFAULT_CONFIG) {
   const warnings = [];
+  const features = projectCfg.features || DEFAULT_CONFIG.features;
+  const hasTickets = Boolean(features.hasTickets);
+  const hasQuality = Boolean(features.hasQuality);
+  const trafficSources = projectCfg.trafficSources || [];
+  const funnels = projectCfg.funnels || [];
   const paidAdsets = new Set(overview.map((o) => o.adset.toLowerCase()));
   const campCfg = loadCampaignConfig();
   const organicPatterns = campCfg.organicPatterns || ['manychat', 'bio'];
@@ -85,15 +118,23 @@ export function buildDataset({ leads, tickets, overview }, cfg) {
   // Leitet die Dimensions-Labels (Kampagne/Anzeigengruppe/Creative) aus einer
   // UTM-Kombination ab – einheitlich für Lead-UTM UND Ticket-UTM verwendbar.
   const dimsFor = (utm) => {
-    const paid = isPaid(utm, paidAdsets, organicPatterns);
+    // Konfigurierte Quelle (Meta/Google/...) schlaegt die Pipe-Heuristik.
+    const src = classifyTrafficSource(utm, trafficSources);
+    const paid = src ? src.paid !== false : isPaid(utm, paidAdsets, organicPatterns);
     const rawCampaign = collapse(utm.campaign);
     const rawAdset = collapse(utm.source);
     const rawCreative = collapse(utm.medium);
-    if (!paid) return { paid: false, campaign: organicLabel, adset: organicLabel, creative: rawCreative || organicLabel };
+    // Nur Quellen mit eigenem Spend-Feed (Meta) gehen in die Kosten-Attribution.
+    // Bezahlte Quellen OHNE Spend (z. B. Google Ads ohne API-Anbindung) wuerden
+    // sonst den CPL verwaessern - sie bekommen einen eigenen Bucket.
+    const hasSpend = src ? Boolean(src.hasSpend) : paid;
+    const bucket = src ? src.id : (paid ? 'paid' : 'organic');
+    const base = { bucket, bucketLabel: src ? (src.label || src.id) : null, hasSpend };
+    if (!paid) return { ...base, paid: false, campaign: organicLabel, adset: organicLabel, creative: rawCreative || organicLabel };
     if (isNumericId(rawCampaign) || isNumericId(rawAdset) || !rawCampaign || !rawAdset) {
-      return { paid: true, campaign: unattribLabel, adset: unattribLabel, creative: rawCreative || unattribLabel };
+      return { ...base, paid: true, campaign: unattribLabel, adset: unattribLabel, creative: rawCreative || unattribLabel };
     }
-    return { paid: true, campaign: rawCampaign, adset: rawAdset, creative: rawCreative || unattribLabel };
+    return { ...base, paid: true, campaign: rawCampaign, adset: rawAdset, creative: rawCreative || unattribLabel };
   };
 
   // Antworten/Qualität aus dem VIP-Tab nach E-Mail indizieren (zum Anreichern
@@ -132,6 +173,7 @@ export function buildDataset({ leads, tickets, overview }, cfg) {
       }
     }
     recs.push({
+      funnel: l.funnel ?? null,
       email,
       firstName: l.firstName || t?.firstName || '',
       lastName: l.lastName || t?.lastName || '',
@@ -160,6 +202,7 @@ export function buildDataset({ leads, tickets, overview }, cfg) {
     if (identity) claimedTickets.add(identity);
     const email = t.email || t.emailTypeform || '';
     recs.push({
+      funnel: t.funnel ?? null,
       email,
       firstName: t.firstName || '',
       lastName: t.lastName || '',
@@ -180,7 +223,7 @@ export function buildDataset({ leads, tickets, overview }, cfg) {
     const ld = dimsFor(r.utm);
     const paid = ld.paid;
     const { campaign, adset, creative } = ld;
-    const quality = r.hasTicket ? computeQuality(r.answers, cfg) : null;
+    const quality = hasQuality && r.hasTicket ? computeQuality(r.answers, cfg) : null;
 
     // Ticket-Dimensionen aus der TICKET-EIGENEN UTM (damit ein Ticket dort zählt,
     // wo es wirklich entstand – nicht in jeder Kampagne, in der die Person Lead war)
@@ -191,18 +234,20 @@ export function buildDataset({ leads, tickets, overview }, cfg) {
     }
 
     records.push({
-      ticketCampaign,
-      ticketAdset,
-      ticketCreative,
+      // Nur Meta-Leads gelten als 'paid' und gehen in die Spend-Attribution ein.
+      // 'other-paid' = bezahlt, aber ohne bekannte Kosten (z. B. Google Ads).
+      sourceBucket: ld.bucket,
+      sourceLabel: ld.bucketLabel,
+      funnel: r.funnel ?? null,
+      ...(hasTickets ? { ticketCampaign, ticketAdset, ticketCreative } : {}),
       email: r.email,
       name: collapse(`${r.firstName} ${r.lastName}`) || '(ohne Name)',
       firstName: r.firstName,
       lastName: r.lastName,
       phone: r.phone,
       wonAt: r.wonAt,
-      ticketAt: r.ticketAt,
-      hasTicket: r.hasTicket,
-      sourceType: paid ? 'paid' : 'organic',
+      ...(hasTickets ? { ticketAt: r.ticketAt, hasTicket: r.hasTicket } : {}),
+      sourceType: paid ? (ld.hasSpend ? 'paid' : 'other-paid') : 'organic',
       campaign,
       adset,
       creative,
@@ -214,8 +259,7 @@ export function buildDataset({ leads, tickets, overview }, cfg) {
       mediumRaw: collapse(r.utm.medium),
       // Aussagekräftige Gruppierung für den Organisch-Container
       ...(paid ? {} : (() => { const o = organicLabels(r.utm); return { organicCampaign: o.campaign, organicAdset: o.adset }; })()),
-      quality,
-      answers: r.answers,
+      ...(hasQuality ? { quality, answers: r.answers } : {}),
     });
   }
 
@@ -242,8 +286,16 @@ export function buildDataset({ leads, tickets, overview }, cfg) {
     counts: {
       leads: records.length,
       paidLeads: records.filter((r) => r.sourceType === 'paid').length,
-      tickets: records.filter((r) => r.hasTicket).length,
-      scored: records.filter((r) => r.quality).length,
+      otherPaidLeads: records.filter((r) => r.sourceType === 'other-paid').length,
+      organicLeads: records.filter((r) => r.sourceType === 'organic').length,
+      ...(hasTickets ? { tickets: records.filter((r) => r.hasTicket).length } : {}),
+      ...(hasQuality ? { scored: records.filter((r) => r.quality).length } : {}),
+      byFunnel: Object.fromEntries(
+        funnels.map((f) => [f.id, records.filter((r) => r.funnel === f.id).length]),
+      ),
+      bySource: Object.fromEntries(
+        trafficSources.map((sx) => [sx.id, records.filter((r) => r.sourceBucket === sx.id).length]),
+      ),
     },
   };
 }

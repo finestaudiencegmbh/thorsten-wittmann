@@ -9,3 +9,6 @@ dist/
 service-account.json
 credentials/
 *.serviceaccount.json
+
+# lokale Service-Account-Schlüssel
+service-account.json
