@@ -24,6 +24,8 @@ const CFG = {
   sheet: {
     ...DEFAULT_CONFIG.sheet,
     leadColumns: { ...DEFAULT_CONFIG.sheet.leadColumns, wonAt: ['gewonnen am', 'datum'] },
+    // Dieses Sheet legt die Anzeigengruppe in utm_term ab, nicht in utm_source.
+    utmMapping: { campaign: 'utmCampaign', adset: 'utmTerm', creative: 'utmContent', placement: null },
     decodePlusAsSpace: true,
   },
   trafficSources: [
@@ -31,6 +33,8 @@ const CFG = {
     { id: 'google', label: 'Google', paid: true, hasSpend: false, match: ['google', 'youtube'], mediums: ['cpc', 'ppc', 'paid'] },
   ],
 };
+
+const features = { hasTickets: false, hasQuality: false };
 
 const HEAD = ['Datum', 'Vorname', 'E-Mail', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
 const sheets = [
@@ -136,6 +140,62 @@ PAIRS.forEach(([src, med, , expType, expBucket], i) => {
   assert.equal(l.sourceBucket, expBucket, `${src || '(leer)'}/${med || '(leer)'} -> bucket`);
 });
 
+// --- 6c) UTM -> Dimension: die Zuordnung ist kontoabhaengig ----------------
+// Hier steht die Anzeigengruppe in utm_term und utm_source ist konstant "meta".
+// Mit der Standard-Zuordnung (adset = utm_source) bekaeme JEDER Lead die
+// Anzeigengruppe "meta" - die matcht keinen Meta-Namen, also 0 Leads auf jeder
+// Anzeigengruppe bei vollem Spend.
+const DIM_HEAD = HEAD;
+const dimRows = [
+  ['2026-08-20 04:11:02', 'Angela', 'a@x.de', 'meta', 'ppc', 'DP | CCC | ABO | 190826', 'AG1: DP | CCC | Broad | DE | MW 30-55', ''],
+  ['2026-08-20 06:48:08', 'Rene', 'b@x.de', 'meta', 'ppc', 'DP | CCC | ABO | 190826', 'AG2: DP | CCC | Pferde | DE | MW 30-55', 'AG2 CCC DP: Reel'],
+];
+const dimDs = buildDataset(
+  parseSheets([{ title: 'Leads CCC', values: [DIM_HEAD, ...dimRows] }], CFG),
+  { weights: {}, tiers: [] },
+  CFG,
+);
+assert.equal(dimDs.leads[0].campaign, 'DP | CCC | ABO | 190826');
+assert.equal(dimDs.leads[0].adset, 'AG1: DP | CCC | Broad | DE | MW 30-55',
+  'Anzeigengruppe kommt aus utm_term');
+assert.equal(dimDs.leads[1].creative, 'AG2 CCC DP: Reel', 'Creative kommt aus utm_content');
+assert.equal(dimDs.leads[0].placement, null, 'nicht zugeordnete Dimension bleibt leer');
+
+// Gegenprobe: mit der Standard-Zuordnung bricht genau dieser Fall
+const wrongDs = buildDataset(
+  parseSheets([{ title: 'Leads CCC', values: [DIM_HEAD, ...dimRows] }], CFG),
+  { weights: {}, tiers: [] },
+  { ...CFG, sheet: { ...CFG.sheet, utmMapping: DEFAULT_CONFIG.sheet.utmMapping } },
+);
+assert.equal(wrongDs.leads[0].adset, 'meta',
+  'Standard-Zuordnung wuerde utm_source nehmen - hier konstant "meta"');
+
+// Und die Attribution zieht bis auf Anzeigengruppen-Ebene durch
+const dimMeta = {
+  entities: [
+    { campaignId: 'c1', campaign: 'DP | CCC | ABO | 190826', adsetId: 'a1', adset: 'AG1: DP | CCC | Broad | DE | MW 30-55', adId: 'ad1', creative: 'AG1 CCC DP: Video TW 0406', spend: 310, impressions: 20000, clicks: 300, cpm: 15, uniqueOutboundClicks: 200 },
+    { campaignId: 'c1', campaign: 'DP | CCC | ABO | 190826', adsetId: 'a2', adset: 'AG2: DP | CCC | Pferde | DE | MW 30-55', adId: 'ad2', creative: 'AG2 CCC DP: Reel', spend: 90, impressions: 9000, clicks: 120, cpm: 10, uniqueOutboundClicks: 80 },
+  ],
+  daily: [], dailyEntities: [],
+  campaignStatus: { 'DP | CCC | ABO | 190826': { status: 'ACTIVE', active: true, objective: 'OUTCOME_LEADS' } },
+  adsetStatus: {}, adStatus: {}, adList: [],
+};
+const dimC = combineMetaWithLeads(dimMeta, dimDs.leads, { features });
+const camp = dimC.hierarchy[0];
+assert.equal(camp.leads, 2, 'Kampagnen-Ebene');
+const ag1 = camp.adsets.find((a) => a.name.startsWith('AG1'));
+const ag2 = camp.adsets.find((a) => a.name.startsWith('AG2'));
+assert.equal(ag1.leads, 1, 'Anzeigengruppe AG1 bekommt ihren Lead (vorher 0)');
+assert.equal(ag2.leads, 1, 'Anzeigengruppe AG2 bekommt ihren Lead (vorher 0)');
+assert.ok(ag2.ads.some((ad) => ad.name === 'AG2 CCC DP: Reel' && ad.leads === 1),
+  'Ad-Ebene matcht ueber utm_content');
+
+// Gegenprobe auf Hierarchie-Ebene: falsche Zuordnung -> 0 Leads trotz Spend
+const wrongC = combineMetaWithLeads(dimMeta, wrongDs.leads, { features });
+const wrongAg = wrongC.hierarchy[0].adsets.find((a) => a.name.startsWith('AG1'));
+assert.equal(wrongAg.leads, 0, 'genau der gemeldete Fehler: Spend da, Leads 0');
+assert.ok(wrongAg.spend > 0);
+
 // --- 7) Funnel-Ansicht in combine ------------------------------------------
 const meta = {
   entities: [
@@ -153,8 +213,6 @@ const meta = {
   },
   adsetStatus: {}, adStatus: {}, adList: [],
 };
-const features = { hasTickets: false, hasQuality: false };
-
 const all = combineMetaWithLeads(meta, ds.leads, { features });
 assert.equal(all.totals.spend, 500, 'Gesamtsicht summiert beide Funnels');
 

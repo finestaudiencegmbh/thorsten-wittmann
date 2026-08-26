@@ -86,6 +86,17 @@ export const DEFAULT_CONFIG = {
       ticketsQualified: ['ticket qualifiziert'],
       ticketsUnqualified: ['ticket nicht qualifiziert'],
     },
+    // Welches UTM-Feld traegt welche Auswertungs-Dimension? Das ist von Konto
+    // zu Konto verschieden: manche schreiben die Anzeigengruppe in utm_source,
+    // andere in utm_term. Stimmt die Zuordnung nicht, matchen die Leads nicht
+    // gegen die Meta-Namen und die Ebene zeigt 0 Leads bei vollem Spend.
+    // null = diese Dimension gibt es im Sheet nicht (Reiter wird ausgeblendet).
+    utmMapping: {
+      campaign: 'utmCampaign',
+      adset: 'utmSource',
+      creative: 'utmMedium',
+      placement: 'utmTerm',
+    },
     // Manche Sheets speichern UTM-Werte URL-kodiert ("A+|+B" statt "A | B").
     // Ohne Rückwandlung matchen sie nicht gegen die Meta-Kampagnennamen.
     decodePlusAsSpace: false,
@@ -133,6 +144,7 @@ export function publicConfig(cfg) {
     branding: cfg.branding,
     features: cfg.features,
     funnels: (cfg.funnels || []).map((f) => ({ id: f.id, label: f.label || f.id })),
+    utmMapping: (cfg.sheet || {}).utmMapping || {},
     trafficSources: (cfg.trafficSources || []).map((s) => ({ id: s.id, label: s.label || s.id, paid: s.paid !== false, hasSpend: Boolean(s.hasSpend) })),
   };
 }

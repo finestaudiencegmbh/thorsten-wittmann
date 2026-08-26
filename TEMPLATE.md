@@ -76,6 +76,41 @@ Feld akzeptiert mehrere Schreibweisen — der erste Treffer gewinnt:
 
 Vergleich ist case-insensitiv, Doppelleerzeichen und `?:.` werden ignoriert.
 
+### `utmMapping` — der häufigste Fehler
+
+Welches UTM-Feld welche Auswertungs-Ebene trägt, ist **von Konto zu Konto
+verschieden**. Stimmt die Zuordnung nicht, matchen die Leads nicht gegen die
+Meta-Namen: die Ebene zeigt dann **vollen Adspend bei 0 Leads** — ohne
+Fehlermeldung.
+
+```jsonc
+"utmMapping": {
+  "campaign":  "utmCampaign",
+  "adset":     "utmTerm",      // hier steht die Anzeigengruppe – NICHT in utm_source
+  "creative":  "utmContent",
+  "placement":  null           // null = gibt es nicht -> Reiter wird ausgeblendet
+}
+```
+
+Standard ist das Schema des Ursprungsprojekts (`adset: "utmSource"`,
+`creative: "utmMedium"`, `placement: "utmTerm"`).
+
+**So findest du die richtige Zuordnung:** eine bezahlte Zeile im Sheet ansehen
+und mit den echten Namen im Werbekonto vergleichen. Felder mit immer demselben
+Wert (`meta`, `ppc`) tragen **keine** Dimension — sie taugen nur zur
+Quellen-Erkennung.
+
+| Feld | Beispiel A | Beispiel B |
+|---|---|---|
+| `utm_source` | `J&P \| LP 1 \| Broad \| DACH` → Anzeigengruppe | `meta` → konstant, keine Dimension |
+| `utm_medium` | `LP 1 - Static 19` → Creative | `ppc` → konstant, keine Dimension |
+| `utm_campaign` | Kampagnenname | Kampagnenname |
+| `utm_term` | Placement | **Anzeigengruppe** |
+| `utm_content` | – | Ad-Name |
+
+Nach dem Deploy gegenprüfen: eine Kampagne aufklappen. Steht bei einer
+Anzeigengruppe Adspend, aber 0 Leads, ist die Zuordnung falsch.
+
 ### `decodePlusAsSpace` — vorher prüfen!
 
 Manche Sheets speichern UTM-Werte URL-kodiert:
@@ -176,7 +211,8 @@ verhindert still verfälschte CPLs.
 
 ## 5. Logo & Restarbeiten
 
-- `web/public/logo.svg` ersetzen. **Farben fest ins SVG schreiben** — ein per
+- `web/public/logo.svg` ersetzen — oder `branding.logo` auf `""` setzen, dann
+  zeigt der Kopf nur den Projektnamen. **Farben fest ins SVG schreiben** — ein per
   `<img>` eingebundenes SVG erbt keine Seitenfarben, `currentColor` würde zu
   Schwarz auflösen und auf dunklem Grund verschwinden.
 - `config/campaigns.json`: welche Meta-Ziele als Lead-Kampagne zählen
@@ -295,7 +331,8 @@ Datensatz landen.
 
 - [ ] `project.config.json`: Name, Untertitel, Branding
 - [ ] Feature-Flags gesetzt
-- [ ] Sheet-Spalten gemappt, `decodePlusAsSpace` geprüft
+- [ ] Sheet-Spalten gemappt, `utmMapping` gegen die echten Kampagnennamen geprüft
+- [ ] `decodePlusAsSpace` geprüft
 - [ ] Funnels definiert (oder `[]`)
 - [ ] Traffic-Quellen inkl. `hasSpend` gesetzt
 - [ ] `web/public/logo.svg` ersetzt

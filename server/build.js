@@ -116,6 +116,14 @@ export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEF
   const hasTickets = Boolean(features.hasTickets);
   const hasQuality = Boolean(features.hasQuality);
   const trafficSources = projectCfg.trafficSources || [];
+  // UTM-Feld je Dimension (siehe project-config.js -> sheet.utmMapping).
+  const utmMap = { ...DEFAULT_CONFIG.sheet.utmMapping, ...((projectCfg.sheet || {}).utmMapping || {}) };
+  const UTM_FIELD = { utmSource: 'source', utmMedium: 'medium', utmCampaign: 'campaign', utmTerm: 'term', utmContent: 'content' };
+  /** Liest den UTM-Wert, der laut Config diese Dimension traegt. */
+  const dimValue = (utm, dim) => {
+    const field = UTM_FIELD[utmMap[dim]];
+    return field ? collapse(utm[field]) : '';
+  };
   const funnels = projectCfg.funnels || [];
   const paidAdsets = new Set(overview.map((o) => o.adset.toLowerCase()));
   const campCfg = loadCampaignConfig();
@@ -129,20 +137,21 @@ export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEF
     // Konfigurierte Quelle (Meta/Google/...) schlaegt die Pipe-Heuristik.
     const src = classifyTrafficSource(utm, trafficSources);
     const paid = src ? src.paid !== false : isPaid(utm, paidAdsets, organicPatterns);
-    const rawCampaign = collapse(utm.campaign);
-    const rawAdset = collapse(utm.source);
-    const rawCreative = collapse(utm.medium);
+
     // Nur Quellen mit eigenem Spend-Feed (Meta) gehen in die Kosten-Attribution.
     // Bezahlte Quellen OHNE Spend (z. B. Google Ads ohne API-Anbindung) wuerden
     // sonst den CPL verwaessern - sie bekommen einen eigenen Bucket.
     const hasSpend = src ? Boolean(src.hasSpend) : paid;
     const bucket = src ? src.id : (paid ? 'paid' : 'organic');
     const base = { bucket, bucketLabel: src ? (src.label || src.id) : null, hasSpend };
-    if (!paid) return { ...base, paid: false, campaign: organicLabel, adset: organicLabel, creative: rawCreative || organicLabel };
-    if (isNumericId(rawCampaign) || isNumericId(rawAdset) || !rawCampaign || !rawAdset) {
-      return { ...base, paid: true, campaign: unattribLabel, adset: unattribLabel, creative: rawCreative || unattribLabel };
+    const rawCampaign2 = dimValue(utm, 'campaign');
+    const rawAdset2 = dimValue(utm, 'adset');
+    const rawCreative2 = dimValue(utm, 'creative');
+    if (!paid) return { ...base, paid: false, campaign: organicLabel, adset: organicLabel, creative: rawCreative2 || organicLabel };
+    if (isNumericId(rawCampaign2) || isNumericId(rawAdset2) || !rawCampaign2 || !rawAdset2) {
+      return { ...base, paid: true, campaign: unattribLabel, adset: unattribLabel, creative: rawCreative2 || unattribLabel };
     }
-    return { ...base, paid: true, campaign: rawCampaign, adset: rawAdset, creative: rawCreative || unattribLabel };
+    return { ...base, paid: true, campaign: rawCampaign2, adset: rawAdset2, creative: rawCreative2 || unattribLabel };
   };
 
   // Antworten/Qualität aus dem VIP-Tab nach E-Mail indizieren (zum Anreichern
@@ -259,8 +268,8 @@ export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEF
       campaign,
       adset,
       creative,
-      placement: placementLabel(r.utm.term),
-      placementRaw: collapse(r.utm.term),
+      placement: utmMap.placement ? placementLabel(dimValue(r.utm, 'placement')) : null,
+      placementRaw: utmMap.placement ? dimValue(r.utm, 'placement') : '',
       // Rohe UTM-Werte für den Quellen-Tab (Donut/Top-Listen)
       sourceRaw: collapse(r.utm.source),
       campaignRaw: collapse(r.utm.campaign),

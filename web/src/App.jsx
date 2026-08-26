@@ -133,9 +133,9 @@ export default function App() {
   }, [data, filtered, fb, orgDrill]);
 
   // Drill-Down: Klick auf eine Zeile zoomt eine Ebene tiefer (lokaler Pfad).
-  const DRILL_ORDER = ['campaign', 'adset', 'creative', 'placement'];
+  const DRILL_ORDER = DIMENSIONS.map((d) => d.key);
   const selectDim = (key) => {
-    if (tab === 'placement') return; // unterste Ebene, kein weiteres Reinzoomen
+    if (tab === DRILL_ORDER[DRILL_ORDER.length - 1]) return; // unterste Ebene
     setDrill((d) => ({ ...d, [tab]: key }));
     const idx = DRILL_ORDER.indexOf(tab);
     if (idx >= 0 && idx < DRILL_ORDER.length - 1) setTab(DRILL_ORDER[idx + 1]);
@@ -147,7 +147,8 @@ export default function App() {
     <div className="layout">
       <aside className="sidebar">
         <div className="brand">
-          <img className="brand-logo" src={BRANDING.logo || '/logo.svg'} alt={PROJECT.name || ''} width="40" height="40" />
+          {/* Logo nur, wenn branding.logo gesetzt ist ("" = ohne Bild). */}
+          {BRANDING.logo && <img className="brand-logo" src={BRANDING.logo} alt={PROJECT.name || ''} width="40" height="40" />}
           <div className="brand-text">
             <div className="brand-title">{PROJECT.name}</div>
             {PROJECT.subtitle && <div className="brand-sub">{PROJECT.subtitle}</div>}
@@ -169,7 +170,7 @@ export default function App() {
       <main className="content">
         <header className="topbar">
           <div className="topbar-title">
-            <img className="topbar-logo" src={BRANDING.logo || '/logo.svg'} alt="" width="34" height="34" />
+            {BRANDING.logo && <img className="topbar-logo" src={BRANDING.logo} alt="" width="34" height="34" />}
             <div>
               <h1>{NAV.find((n) => n.key === view)?.label}</h1>
               <p className="subtitle">{PROJECT.subtitle}</p>

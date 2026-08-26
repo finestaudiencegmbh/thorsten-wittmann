@@ -4,7 +4,7 @@
   "branding": {
     "accent": "#f79800",
     "surface": "#163358",
-    "logo": "/logo.svg"
+    "logo": ""
   },
   "features": {
     "hasTickets": false,
@@ -63,7 +63,13 @@
         "vip-ticket geholt am"
       ]
     },
-    "decodePlusAsSpace": true
+    "decodePlusAsSpace": true,
+    "utmMapping": {
+      "campaign": "utmCampaign",
+      "adset": "utmTerm",
+      "creative": "utmContent",
+      "placement": null
+    }
   },
   "trafficSources": [
     {

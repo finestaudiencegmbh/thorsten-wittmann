@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { hasTickets, hasQuality, TRAFFIC_SOURCES } from '../config.js';
+import { hasTickets, hasQuality, hasDimension, TRAFFIC_SOURCES } from '../config.js';
 import { uniqueValues, answerValues } from '../lib.js';
 
 function Select({ label, value, onChange, options, allLabel = 'Alle' }) {
@@ -62,7 +62,7 @@ export default function Filters({ leads, filters, setFilters, tiers, onReset }) 
             <Select label="Kampagne" value={filters.campaign} onChange={(v) => set({ campaign: v })} options={uniqueValues(leads, 'campaign')} />
             <Select label="Anzeigengruppe" value={filters.adset} onChange={(v) => set({ adset: v })} options={uniqueValues(leads, 'adset')} />
             <Select label="Creative" value={filters.creative} onChange={(v) => set({ creative: v })} options={uniqueValues(leads, 'creative')} />
-            <Select label="Placement" value={filters.placement} onChange={(v) => set({ placement: v })} options={uniqueValues(leads, 'placement')} />
+            {hasDimension('placement') && <Select label="Placement" value={filters.placement} onChange={(v) => set({ placement: v })} options={uniqueValues(leads, 'placement')} />}
           </div>
 
           {hasQuality && (

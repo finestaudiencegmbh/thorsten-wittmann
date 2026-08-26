@@ -1,4 +1,4 @@
-import { hasTickets, hasQuality } from './config.js';
+import { hasTickets, hasQuality, hasDimension } from './config.js';
 
 // ---- Formatierung ----------------------------------------------------------
 const eur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
@@ -25,12 +25,13 @@ export const fmtDate = (iso) => {
 export const dayKey = (iso) => (iso ? String(iso).slice(0, 10) : '');
 
 // ---- Filterung -------------------------------------------------------------
+// Nur Dimensionen, die im Sheet ueberhaupt eine Quelle haben (sheet.utmMapping).
 export const DIMENSIONS = [
   { key: 'campaign', label: 'Kampagne' },
   { key: 'adset', label: 'Anzeigengruppe' },
   { key: 'creative', label: 'Creative' },
   { key: 'placement', label: 'Placement' },
-];
+].filter((d) => hasDimension(d.key));
 
 export function uniqueValues(leads, key) {
   return [...new Set(leads.map((l) => l[key]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));

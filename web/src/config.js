@@ -22,6 +22,16 @@ export const hasFunnels = FUNNELS.length > 0;
 /** Nur die Traffic-Quellen, fuer die es echte Kostendaten gibt (heute: Meta). */
 export const spendSources = TRAFFIC_SOURCES.filter((s) => s.hasSpend);
 
+/**
+ * Welche Auswertungs-Dimensionen hat dieses Sheet? Eine Dimension ohne
+ * zugeordnetes UTM-Feld (sheet.utmMapping) hat keine Datengrundlage - der
+ * Reiter dafuer wuerde nur eine "(kein ...)"-Zeile zeigen und wird ausgeblendet.
+ */
+const UTM_MAPPING = PROJECT.sheet?.utmMapping || {
+  campaign: 'utmCampaign', adset: 'utmSource', creative: 'utmMedium', placement: 'utmTerm',
+};
+export const hasDimension = (key) => Boolean(UTM_MAPPING[key]);
+
 // ---- Farbableitung ---------------------------------------------------------
 // Aus EINER Akzentfarbe werden alle Abstufungen berechnet, damit ein neues
 // Projekt nur einen Hex-Wert pflegen muss.
