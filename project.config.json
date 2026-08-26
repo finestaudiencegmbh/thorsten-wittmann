@@ -1,53 +1,101 @@
 {
   "name": "Thorsten Wittmann Scaling",
   "subtitle": "Lead- & Kampagnen-Dashboard",
-
   "branding": {
     "accent": "#f79800",
     "surface": "#163358",
     "logo": "/logo.svg"
   },
-
   "features": {
     "hasTickets": false,
     "hasQuality": false
   },
-
   "funnels": [
-    { "id": "CCC", "label": "CCC", "sheetTab": "ccc", "match": ["ccc"] },
-    { "id": "AKD", "label": "AKD", "sheetTab": "akd", "match": ["akd"] }
+    {
+      "id": "CCC",
+      "label": "CCC",
+      "sheetTab": "ccc",
+      "match": [
+        "ccc"
+      ]
+    },
+    {
+      "id": "AKD",
+      "label": "AKD",
+      "sheetTab": "akd",
+      "match": [
+        "akd"
+      ]
+    }
   ],
-
   "sheet": {
     "leadColumns": {
-      "wonAt": ["gewonnen am", "datum"],
-      "firstName": ["vorname"],
-      "lastName": ["nachname"],
-      "email": ["e-mail", "email"],
-      "utmSource": ["utm_source"],
-      "utmMedium": ["utm_medium"],
-      "utmCampaign": ["utm_campaign"],
-      "utmTerm": ["utm_term"],
-      "utmContent": ["utm_content"],
-      "ticketAt": ["vip-ticket geholt am"]
+      "wonAt": [
+        "gewonnen am",
+        "datum"
+      ],
+      "firstName": [
+        "vorname"
+      ],
+      "lastName": [
+        "nachname"
+      ],
+      "email": [
+        "e-mail",
+        "email"
+      ],
+      "utmSource": [
+        "utm_source"
+      ],
+      "utmMedium": [
+        "utm_medium"
+      ],
+      "utmCampaign": [
+        "utm_campaign"
+      ],
+      "utmTerm": [
+        "utm_term"
+      ],
+      "utmContent": [
+        "utm_content"
+      ],
+      "ticketAt": [
+        "vip-ticket geholt am"
+      ]
     },
     "decodePlusAsSpace": true
   },
-
   "trafficSources": [
     {
       "id": "meta",
       "label": "Meta",
       "paid": true,
       "hasSpend": true,
-      "match": ["meta", "facebook", "instagram"]
+      "match": [
+        "meta",
+        "facebook",
+        "instagram"
+      ],
+      "mediums": [
+        "ppc",
+        "cpc",
+        "paid"
+      ]
     },
     {
       "id": "google",
       "label": "Google",
       "paid": true,
       "hasSpend": false,
-      "match": ["google", "youtube"]
+      "match": [
+        "google",
+        "youtube"
+      ],
+      "mediums": [
+        "cpc",
+        "ppc",
+        "paid"
+      ]
     }
   ]
 }

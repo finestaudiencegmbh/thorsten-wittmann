@@ -34,7 +34,18 @@ function rand(arr, i) {
   return arr[i % arr.length];
 }
 
-export function getSampleParsed() {
+/**
+ * Verteilt die Demo-Datensaetze auf die konfigurierten Funnels, damit der
+ * Demo-Modus dieselbe Struktur zeigt wie der Echtbetrieb. Ohne Funnels in der
+ * Config bleibt das Feld null und das Dashboard zeigt keine Unterreiter.
+ */
+function funnelFor(cfg, i) {
+  const fs = cfg?.funnels || [];
+  return fs.length ? fs[i % fs.length].id : null;
+}
+
+export function getSampleParsed(cfg = {}) {
+  const hasTickets = Boolean(cfg?.features?.hasTickets);
   const leads = [];
   const tickets = [];
   let seed = 7;
@@ -48,8 +59,9 @@ export function getSampleParsed() {
     const email = `demo.lead${i}@example.com`;
     const day = 24 + (i % 4);
     const wonAt = new Date(Date.UTC(2026, 4, day, 10 + (i % 12), (i * 7) % 60, 0)).toISOString();
-    const gotTicket = next() < 0.45;
+    const gotTicket = hasTickets && next() < 0.45;
     leads.push({
+      funnel: funnelFor(cfg, i),
       wonAt,
       firstName: `Demo${i}`,
       lastName: 'Person',
@@ -64,6 +76,7 @@ export function getSampleParsed() {
     });
     if (gotTicket) {
       tickets.push({
+        funnel: funnelFor(cfg, i),
         at: wonAt,
         firstName: `Demo${i}`,
         lastName: 'Person',
@@ -87,16 +100,18 @@ export function getSampleParsed() {
   // ein paar organische Leads
   for (let i = 0; i < 6; i++) {
     leads.push({
+      funnel: funnelFor(cfg, i),
       wonAt: new Date(`2026-05-2${5 + (i % 3)}T12:00:00Z`).toISOString(),
       firstName: `Organic${i}`,
       lastName: 'Person',
       email: `demo.organic${i}@example.com`,
-      utm: { source: rand(['instagram', 'fb-bio', 'yt-bio'], i), medium: 'bio', campaign: 'moneymaker-workshop-2026', term: 'workshop-anmeldung' },
+      utm: { source: rand(['instagram', 'fb-bio', 'yt-bio'], i), medium: 'bio', campaign: 'organic-referral', term: 'direktanmeldung' },
       ticketAt: null,
     });
   }
 
   const overview = adsets.map((adset, i) => ({
+    funnel: funnelFor(cfg, i),
     status: i % 3 === 0 ? 'AUS' : 'AN',
     adset,
     adspend: 800 + i * 350,

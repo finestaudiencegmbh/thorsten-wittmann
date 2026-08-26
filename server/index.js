@@ -66,7 +66,7 @@ async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
     parsed = parseSheets(sheets, PROJECT);
     source = 'google';
   } else {
-    parsed = getSampleParsed();
+    parsed = getSampleParsed(PROJECT);
     source = 'demo';
   }
   const dataset = buildDataset(parsed, cfg, PROJECT);

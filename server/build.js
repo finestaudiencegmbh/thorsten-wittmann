@@ -53,26 +53,34 @@ function isOrganicSource(utm, patterns) {
 
 /**
  * Ordnet einen Lead einer konfigurierten Traffic-Quelle zu (z. B. Meta, Google).
- * Gematcht wird gegen utm_source, ersatzweise gegen medium/campaign.
+ *
+ * Gematcht wird gegen utm_source. Ist bei der Quelle `mediums` gesetzt, MUSS
+ * zusaetzlich das utm_medium passen. Das ist wichtig, weil dieselbe Plattform
+ * bezahlt und organisch auftaucht: "instagram/organic" oder "youtube.com/social"
+ * sind Referrals, keine Ads - ohne die Medium-Pruefung wuerden sie als bezahlt
+ * gezaehlt und den CPL verfaelschen.
+ *
  * Liefert null, wenn keine Quelle greift -> Fallback auf die Pipe-Heuristik.
  */
 function classifyTrafficSource(utm, sources) {
   if (!sources || !sources.length) return null;
   const src = collapse(utm.source).toLowerCase();
-  const hay = [utm.source, utm.medium, utm.campaign].map((v) => collapse(v).toLowerCase()).join(' | ');
+  const med = collapse(utm.medium).toLowerCase();
+  if (!src) return null;
+
+  const mediumOk = (s) => {
+    const list = s.mediums;
+    if (!list || !list.length) return true; // keine Einschraenkung konfiguriert
+    return list.some((m) => med === String(m).toLowerCase());
+  };
+
   for (const s of sources) {
+    if (!mediumOk(s)) continue;
     for (const pat of s.match || []) {
       const p = String(pat).toLowerCase();
-      if (!p) continue;
-      // utm_source hat Vorrang: "googled"/"googleg" sollen auf "google" matchen,
-      // ohne dass ein Kampagnenname mit "google" darin alles einfaengt.
-      if (src.includes(p)) return s;
-    }
-  }
-  for (const s of sources) {
-    for (const pat of s.match || []) {
-      const p = String(pat).toLowerCase();
-      if (p && hay.includes(p)) return s;
+      // utm_source-Praefix genuegt: "googled"/"googleg"/"googleytis" matchen
+      // alle auf "google", ohne dass ein Kampagnenname alles einfaengt.
+      if (p && src.includes(p)) return s;
     }
   }
   return null;
@@ -84,7 +92,7 @@ function classifyTrafficSource(utm, sources) {
  * tauchen in der Adspend-Übersicht auf. Alles andere gilt als organisch.
  */
 function isPaid(utm, paidAdsets, patterns) {
-  // Harte Regel: ManyChat / Bio / moneymaker-workshop ist immer organisch.
+  // Harte Regel: konfigurierte Organisch-Muster (ManyChat, Bio, ...) gewinnen immer.
   if (isOrganicSource(utm, patterns)) return false;
   const src = collapse(utm.source);
   if (!src) return false;
@@ -257,8 +265,17 @@ export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEF
       sourceRaw: collapse(r.utm.source),
       campaignRaw: collapse(r.utm.campaign),
       mediumRaw: collapse(r.utm.medium),
-      // Aussagekräftige Gruppierung für den Organisch-Container
-      ...(paid ? {} : (() => { const o = organicLabels(r.utm); return { organicCampaign: o.campaign, organicAdset: o.adset }; })()),
+      // Aussagekräftige Gruppierung für den Container "ohne Spend-Daten".
+      // Gilt auch fuer bezahlte Quellen ohne Kostenanbindung (z. B. Google Ads) -
+      // sonst wuerden die dort als "(direkt)" landen statt unter ihrer Quelle.
+      ...(ld.hasSpend ? {} : (() => {
+        const o = organicLabels(r.utm);
+        const label = ld.bucketLabel || null;
+        return {
+          organicCampaign: paid && label ? label : o.campaign,
+          organicAdset: paid && label ? (collapse(r.utm.campaign) || label) : o.adset,
+        };
+      })()),
       ...(hasQuality ? { quality, answers: r.answers } : {}),
     });
   }

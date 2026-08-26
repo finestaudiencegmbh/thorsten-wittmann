@@ -1,32 +1,38 @@
-# Fuat & Marta · MoneyMaker-Workshop — Lead- & VIP-Ticket-Dashboard
+# Thorsten Wittmann Scaling — Lead- & Kampagnen-Dashboard
 
-Eine lokale Web-App, die das Google-Tracking-Sheet **live ausliest** und auswertet:
-wie viele Leads jede **Kampagne**, **Anzeigengruppe**, jedes **Creative** und
-**Placement** gebracht hat – inklusive **Lead-Qualität**, abgeleitet aus den
-Antworten beim VIP-Ticket. Sortier- und filterbar, mit CSV-Export. Kein
-manuelles Übertragen ins Sheet mehr nötig.
+Liest das Google Tracking Sheet live aus, führt die Leads über die UTM-Werte mit
+den Meta-Ads-Daten zusammen und wertet sie nach Funnel, Kampagne,
+Anzeigengruppe, Creative und Placement aus. Sortier- und filterbar, mit
+CSV-Export.
 
-> Die App kann **gehostet** (teilbare URL mit Passwort) oder **lokal** laufen.
-> Weil personenbezogene Daten (Namen, E-Mails, Telefonnummern) enthalten sind,
-> ist die gehostete Variante **immer durch ein Login geschützt** – niemals offen
-> im Netz.
+**Zwei Funnels:** `CCC` und `AKD` liegen in getrennten Sheet-Tabs und bekommen
+je einen Unterreiter. Das Hauptdashboard („Gesamt") summiert beide.
 
----
+**Traffic-Quellen** werden getrennt ausgewiesen: Meta (Kosten via API, bildet
+den CPL), Google (bezahlt, Kosten nicht angebunden — bewusst **nicht** im CPL)
+und Organisch.
+
+> Diese Codebasis ist wiederverwendbar. Alles Projektspezifische steht in
+> **`project.config.json`**. Für ein neues Projekt: **[TEMPLATE.md](TEMPLATE.md)**
+> — dort stehen auch alle Environment-Variablen.
+
 
 ## Was die App kann
 
-- **KPIs auf einen Blick:** zugeordneter Adspend, Leads, CPL, VIP-Tickets,
-  Ticket-Rate, Kosten/Ticket, Ø Lead-Qualität, qualifizierte Tickets,
-  Qualitäts-Verteilung.
+- **KPIs auf einen Blick:** zugeordneter Adspend, Leads, CPL — getrennt nach
+  Meta, Google und Organisch. Ticket- und Qualitäts-KPIs erscheinen nur, wenn
+  die entsprechenden Feature-Flags aktiv sind.
 - **Breakdown nach Kampagne / Anzeigengruppe / Creative / Placement** – jeweils
   als sortierbare Tabelle. Zeile anklicken = sofort danach filtern.
-- **Lead-Qualität (0–100):** berechnet aus Einkommen, investiertem Kapital,
+- **Lead-Qualität (0–100)** *(nur bei `hasQuality: true` — in diesem Projekt aus):*
+  berechnet aus Einkommen, investiertem Kapital,
   Immobilienbesitz und Beschäftigung (alles anpassbar, siehe unten). Einteilung
   in Tiers A–D.
 - **Filter:** Quelle (bezahlt/organisch), Kampagne, Anzeigengruppe, Creative,
-  Placement, Einkommen, Immobilien, Beschäftigung, Zeitraum, Qualitäts-Tier,
+  Placement, Zeitraum — sowie Einkommen/Immobilien/Beschäftigung/Tier, sofern
+  das Qualitäts-Feature aktiv ist,
   Volltextsuche.
-- **Lead-Detailtabelle** mit allen VIP-Antworten (aufklappbar) und **CSV-Export**.
+- **Lead-Detailtabelle** (aufklappbar) und **CSV-Export**.
 - **Demo-Modus:** ohne jede Einrichtung sofort mit Beispieldaten ansehbar.
 
 ---
@@ -37,7 +43,8 @@ Damit du eine **teilbare URL mit Passwort** bekommst, ohne lokal etwas zu
 installieren. Wir nutzen **Render** (kostenloser Tarif).
 
 1. Account auf <https://render.com> anlegen und **GitHub verbinden**.
-2. **New + → Blueprint** → dieses Repository (`mmv-fuatmarta`) auswählen.
+2. **New + → Blueprint** → dieses Repository (`thorsten-wittmann`) auswählen und
+   den Branch wählen, auf dem `render.yaml` liegt.
    Render liest die mitgelieferte `render.yaml` automatisch.
 3. Beim Anlegen die abgefragten Werte (Secrets) ausfüllen:
    - `DASHBOARD_USER` und `DASHBOARD_PASSWORD` → frei wählbar. Das ist das Login,
@@ -46,7 +53,7 @@ installieren. Wir nutzen **Render** (kostenloser Tarif).
      JSON-Datei (siehe unten) als **eine Zeile** einfügen. *(Leer lassen = es
      startet erstmal im Demo-Modus.)*
 4. **Apply / Create** → Render baut und startet. Nach 1–2 Minuten bekommst du
-   eine URL wie `https://mmv-fuatmarta-dashboard.onrender.com`.
+   eine URL wie `https://thorsten-wittmann-dashboard.onrender.com`.
 5. URL + Login an dein Team weitergeben. Fertig.
 
 > Hinweis: Im kostenlosen Render-Tarif „schläft" der Dienst nach ~15 Minuten
@@ -119,20 +126,24 @@ oder Reihenfolge dürfen sich ändern:
 | --- | --- | --- |
 | Anzeigengruppen-Übersicht | `Anzeigengruppe` + `Adspend` | Adspend, Klicks, CPC … je Anzeigengruppe |
 | Leads | `Gewonnen am` + `utm_source` | Lead + Attribution (UTM) |
-| VIP-Tickets | `Monatliches Einkommen` / `Teilgenommen am` | Qualifizierungs-Antworten |
 
 **Attribution über UTM:**
 `utm_campaign` = Kampagne · `utm_source` = Anzeigengruppe ·
 `utm_medium` = Creative · `utm_term` = Placement.
 
-Leads und VIP-Tickets werden über die **E-Mail** zusammengeführt (Funnelcockpit-
+In diesem Projekt sind Tickets und Fragebogen-Scoring über
+`features.hasTickets` / `features.hasQuality` **abgeschaltet** — die
+zugehörigen KPIs, Spalten und Filter erscheinen nicht. Die Logik bleibt im Code
+und lässt sich per Config wieder einschalten (siehe TEMPLATE.md).
+
+Historisch (bei aktiven Flags): Leads und Tickets werden über die **E-Mail** zusammengeführt (Funnelcockpit-
 und Typeform-Mail werden beide berücksichtigt, falls sich Tippfehler
 unterscheiden). Adspend wird je **Anzeigengruppe** zugeordnet; auf Creative-/
 Placement-Ebene liefert ihn die Facebook-Anbindung (Phase 2).
 
 ---
 
-## Lead-Qualität anpassen
+## Lead-Qualität anpassen (nur bei `hasQuality: true`)
 
 Das Bewertungsmodell steht in [`config/scoring.json`](config/scoring.json) –
 **kein Code nötig**. Du kannst Gewichte, Einkommens-Skalierung und die
@@ -164,7 +175,7 @@ Implementiert in [`server/supermetrics.js`](server/supermetrics.js). Wenn
 konfiguriert, holt das Dashboard **Spend, Impressionen, Klicks und Placement**
 live aus der Supermetrics-API und führt sie über die Namen
 (Kampagne/Anzeigengruppe/Creative/Placement) mit den Leads zusammen. Damit gibt
-es CPM, CTR, CPL und Kosten/Ticket **bis auf Creative- und Placement-Ebene** –
+es CPM, CTR und CPL **bis auf Creative- und Placement-Ebene** –
 ohne manuelles Pflegen des Adspends im Sheet. Kein Meta-Token nötig,
 Supermetrics übernimmt die Facebook-Authentifizierung.
 
@@ -196,12 +207,15 @@ voll funktionsfähig und zeigt oben einen Hinweis.
 ## Projektstruktur
 
 ```
-config/scoring.json     Bewertungsmodell für die Lead-Qualität (anpassbar)
+project.config.json     Zentrale Projekt-Config: Name, Branding, Feature-Flags,
+                        Sheet-Spalten, Funnels, Traffic-Quellen (siehe TEMPLATE.md)
+config/scoring.json     Bewertungsmodell für die Lead-Qualität (nur bei hasQuality)
 config/supermetrics.json  Facebook-Ads-Abfrage (Felder, Spaltenzuordnung)
 server/                 Node-Backend
   sheets.js             Google-Sheets-Anbindung (Service-Account)
   parser.js             erkennt & parst die Tabellen
-  build.js              Join Leads ↔ Tickets ↔ Adspend, Quelle, Qualität
+  project-config.js     Lädt project.config.json (mit Defaults)
+  build.js              Join Leads ↔ Adspend, Traffic-Bucket, Funnel, Qualität
   scoring.js            Berechnung der Lead-Qualität
   supermetrics.js       Facebook-Ads-Daten via Supermetrics-API
   sample-data.js        synthetische Demo-Daten

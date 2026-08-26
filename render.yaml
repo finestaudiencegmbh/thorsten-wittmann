@@ -1,10 +1,13 @@
 # Render.com Blueprint – Ein-Klick-Deployment des Dashboards.
-# Anleitung in der README ("Gehostet teilen"). Secrets (Service-Account,
-# Login) werden NICHT hier gespeichert, sondern beim Deploy abgefragt.
+# Schritt-fuer-Schritt-Anleitung: TEMPLATE.md
+#
+# Werte mit "sync: false" fragt Render beim Deploy ab und speichert sie NICHT
+# im Repo. Genau dort gehoeren alle Secrets hin (Tokens, Passwoerter, der
+# Google-Service-Account-Key).
 
 services:
   - type: web
-    name: mmv-fuatmarta-dashboard
+    name: thorsten-wittmann-dashboard
     runtime: node
     plan: free
     # devDependencies (vite) werden für den Build gebraucht -> explizit mitinstallieren
@@ -17,8 +20,9 @@ services:
         value: "20"
       - key: NPM_CONFIG_PRODUCTION
         value: "false"
+      # ID des Tracking-Sheets (steht in der Sheet-URL zwischen /d/ und /edit).
       - key: SPREADSHEET_ID
-        value: 1rxK4s-qh1Enbw5L_Ni37xikPEpFe82-5w_7GT-PX6ng
+        value: 1uWpRJgQXB0mWBLcBuZegpKvauRG4pOV8YaABzkcNMUY
       - key: CACHE_TTL_SECONDS
         value: "900"
       # --- KI-Chatbot (optional) – Anthropic-API-Key ---
@@ -37,8 +41,9 @@ services:
       # Hat Vorrang vor Supermetrics, wenn gesetzt.
       - key: META_ACCESS_TOKEN
         sync: false
+      # Ad-Account inkl. "act_"-Praefix.
       - key: META_AD_ACCOUNT_ID
-        sync: false
+        value: act_799222403469426
       # --- Facebook-Ads via Supermetrics – optional, leer = aus ---
       - key: SUPERMETRICS_API_KEY
         sync: false

@@ -1,3 +1,5 @@
+import { hasTickets, hasQuality } from './config.js';
+
 // ---- Formatierung ----------------------------------------------------------
 const eur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
 const eur2 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
@@ -51,11 +53,14 @@ export function applyFilters(leads, f) {
     if (f.adset && l.adset !== f.adset) return false;
     if (f.creative && l.creative !== f.creative) return false;
     if (f.placement && l.placement !== f.placement) return false;
-    if (f.onlyTickets && !l.hasTicket) return false;
-    if (f.employment && l.answers?.employment !== f.employment) return false;
-    if (f.income && l.answers?.income !== f.income) return false;
-    if (f.realEstate && l.answers?.realEstate !== f.realEstate) return false;
-    if (f.tiers && f.tiers.length) {
+    if (f.funnel && l.funnel !== f.funnel) return false;
+    if (hasTickets && f.onlyTickets && !l.hasTicket) return false;
+    if (hasQuality) {
+      if (f.employment && l.answers?.employment !== f.employment) return false;
+      if (f.income && l.answers?.income !== f.income) return false;
+      if (f.realEstate && l.answers?.realEstate !== f.realEstate) return false;
+    }
+    if (hasQuality && f.tiers && f.tiers.length) {
       const tier = l.quality?.tier;
       const ok = (tier && f.tiers.includes(tier)) || (!tier && f.tiers.includes('none'));
       if (!ok) return false;
@@ -146,11 +151,11 @@ export function aggregate(leads, dimKey, overviewByAdset, fb, filters = {}, opts
     const total = g.leads.length;
     const ticketLeads = g.tickets;
     const tickets = ticketLeads.length;
-    const scored = ticketLeads.filter((l) => l.quality);
+    const scored = hasQuality ? ticketLeads.filter((l) => l.quality) : [];
     const avgQuality = scored.length
       ? Math.round(scored.reduce((s, l) => s + l.quality.score, 0) / scored.length)
       : null;
-    const qualified = ticketLeads.filter((l) => ['A', 'B'].includes(l.quality?.tier)).length;
+    const qualified = hasQuality ? ticketLeads.filter((l) => ['A', 'B'].includes(l.quality?.tier)).length : 0;
 
     const dm = addFbRows ? (fb?.dimMeta?.[dimKey]?.[normKey(g.key)] || null) : null;
     const m = fbDim ? fbDim[normKey(g.key)] : null;
@@ -189,11 +194,15 @@ function makeRow({ key, total, tickets, avgQuality, qualified, spend, impression
     key,
     active,
     leads: total,
-    tickets,
-    ticketRate: total ? tickets / total : null,
-    avgQuality,
-    qualified,
-    qualifiedRate: tickets ? qualified / tickets : null,
+    ...(hasTickets ? {
+      tickets,
+      ticketRate: total ? tickets / total : null,
+    } : {}),
+    ...(hasQuality ? {
+      avgQuality,
+      qualified,
+      qualifiedRate: tickets ? qualified / tickets : null,
+    } : {}),
     spend,
     impressions,
     clicks,
@@ -203,24 +212,27 @@ function makeRow({ key, total, tickets, avgQuality, qualified, spend, impression
     cpoc: uoc ? (spend ?? 0) / uoc : null,
     cvrStart: uoc ? total / uoc : null,
     cpl: spend != null && total ? spend / total : null,
-    cpt: spend != null && tickets ? spend / tickets : null,
+    ...(hasTickets ? { cpt: spend != null && tickets ? spend / tickets : null } : {}),
   };
 }
 
 export function computeKpis(leads, overviewByAdset, fb) {
   const total = leads.length;
   const paid = leads.filter((l) => l.sourceType === 'paid');
-  const organic = leads.filter((l) => l.sourceType !== 'paid');
+  // Wichtig: 'other-paid' (bezahlt, aber ohne Kostendaten) ist WEDER paid noch
+  // organisch. Ein !== 'paid' wuerde Google-Ads-Leads als organisch ausweisen.
+  const otherPaid = leads.filter((l) => l.sourceType === 'other-paid');
+  const organic = leads.filter((l) => l.sourceType === 'organic');
 
   // Tickets getrennt nach Quelle
-  const paidTickets = paid.filter((l) => l.hasTicket);
-  const organicTickets = organic.filter((l) => l.hasTicket);
-  const ticketLeads = leads.filter((l) => l.hasTicket);
+  const paidTickets = hasTickets ? paid.filter((l) => l.hasTicket) : [];
+  const organicTickets = hasTickets ? organic.filter((l) => l.hasTicket) : [];
+  const ticketLeads = hasTickets ? leads.filter((l) => l.hasTicket) : [];
 
   // Qualität: über alle bewerteten Tickets (Antworten kommen aus dem Sheet,
   // unabhängig von der Quelle)
-  const scored = ticketLeads.filter((l) => l.quality);
-  const qualified = ticketLeads.filter((l) => ['A', 'B'].includes(l.quality?.tier)).length;
+  const scored = hasQuality ? ticketLeads.filter((l) => l.quality) : [];
+  const qualified = hasQuality ? ticketLeads.filter((l) => ['A', 'B'].includes(l.quality?.tier)).length : 0;
 
   let spend = fb?.totals?.spend ?? null;
   let impressions = fb?.totals?.impressions ?? null;
@@ -236,23 +248,28 @@ export function computeKpis(leads, overviewByAdset, fb) {
   return {
     total,
     paid: paid.length,
+    otherPaid: otherPaid.length,
     organic: organic.length,
-    paidTickets: paidTickets.length,
-    organicTickets: organicTickets.length,
-    paidTicketRate: paid.length ? paidTickets.length / paid.length : null,
-    organicTicketRate: organic.length ? organicTickets.length / organic.length : null,
-    tickets: ticketLeads.length,
-    ticketRate: total ? ticketLeads.length / total : null,
-    avgQuality: scored.length ? Math.round(scored.reduce((s, l) => s + l.quality.score, 0) / scored.length) : null,
-    qualified,
-    qualifiedRate: ticketLeads.length ? qualified / ticketLeads.length : null,
+    ...(hasTickets ? {
+      paidTickets: paidTickets.length,
+      organicTickets: organicTickets.length,
+      paidTicketRate: paid.length ? paidTickets.length / paid.length : null,
+      organicTicketRate: organic.length ? organicTickets.length / organic.length : null,
+      tickets: ticketLeads.length,
+      ticketRate: total ? ticketLeads.length / total : null,
+    } : {}),
+    ...(hasQuality ? {
+      avgQuality: scored.length ? Math.round(scored.reduce((s, l) => s + l.quality.score, 0) / scored.length) : null,
+      qualified,
+      qualifiedRate: ticketLeads.length ? qualified / ticketLeads.length : null,
+    } : {}),
     spend,
     leadSpend,
     nonLeadSpend,
     impressions,
     // Denominator = bezahlte Leads/Tickets (nicht alle), da Spend nur Paid ist
     cpl: leadSpend != null && paid.length ? leadSpend / paid.length : null,
-    cpt: leadSpend != null && paidTickets.length ? leadSpend / paidTickets.length : null,
+    ...(hasTickets ? { cpt: leadSpend != null && paidTickets.length ? leadSpend / paidTickets.length : null } : {}),
   };
 }
 

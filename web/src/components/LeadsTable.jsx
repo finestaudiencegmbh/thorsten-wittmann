@@ -1,31 +1,65 @@
 import React, { useState, useMemo } from 'react';
 import { fmtDate } from '../lib.js';
+import { hasTickets, hasQuality, hasFunnels, PROJECT } from '../config.js';
 import QualityBadge from './QualityBadge.jsx';
+
+const QUESTION_LABELS = PROJECT.sheet?.questionnaireLabels || {};
+
+/** Lesbares Label fuer ein Antwortfeld; faellt auf den Feldnamen zurueck. */
+const answerLabel = (k) => QUESTION_LABELS[k] || k;
 
 const COLS = [
   { key: 'name', label: 'Name', sort: (l) => l.name },
   { key: 'wonAt', label: 'Lead am', sort: (l) => l.wonAt || '' },
+  ...(hasFunnels ? [{ key: 'funnel', label: 'Funnel', sort: (l) => l.funnel || '' }] : []),
   { key: 'sourceType', label: 'Quelle', sort: (l) => l.sourceType },
   { key: 'campaign', label: 'Kampagne', sort: (l) => l.campaign },
   { key: 'adset', label: 'Anzeigengruppe', sort: (l) => l.adset },
   { key: 'creative', label: 'Creative', sort: (l) => l.creative },
   { key: 'placement', label: 'Placement', sort: (l) => l.placement },
-  { key: 'ticket', label: 'VIP', sort: (l) => (l.hasTicket ? 1 : 0) },
-  { key: 'quality', label: 'Qualität', sort: (l) => l.quality?.score ?? -1 },
+  ...(hasTickets ? [{ key: 'ticket', label: 'Ticket', sort: (l) => (l.hasTicket ? 1 : 0) }] : []),
+  ...(hasQuality ? [{ key: 'quality', label: 'Qualität', sort: (l) => l.quality?.score ?? -1 }] : []),
 ];
 
+/** Beschriftung der Quelle: Meta / Google / Organisch statt nur Ads/Organisch. */
+function sourceText(l) {
+  if (l.sourceLabel) return l.sourceLabel;
+  if (l.sourceType === 'paid') return 'Ads';
+  if (l.sourceType === 'other-paid') return 'Bezahlt';
+  return 'Organisch';
+}
+
 function exportCsv(leads) {
-  const head = ['Name', 'E-Mail', 'Telefon', 'Lead am', 'VIP am', 'Quelle', 'Kampagne', 'Anzeigengruppe', 'Creative', 'Placement', 'Quality-Score', 'Tier', 'Einkommen', 'Beschäftigung', 'Immobilien', 'Investiert', 'Beziehungsstand'];
+  // Spalten folgen den aktiven Features, damit der Export keine leeren
+  // Ticket-/Fragebogen-Spalten enthaelt.
+  const answerKeys = hasQuality
+    ? [...new Set(leads.flatMap((l) => Object.keys(l.answers || {})))]
+    : [];
+  const cols = [
+    ['Name', (l) => l.name],
+    ['E-Mail', (l) => l.email],
+    ['Telefon', (l) => l.phone],
+    ['Lead am', (l) => l.wonAt],
+    ...(hasFunnels ? [['Funnel', (l) => l.funnel || '']] : []),
+    ['Quelle', (l) => sourceText(l)],
+    ['Quellen-Typ', (l) => l.sourceType],
+    ['Kampagne', (l) => l.campaign],
+    ['Anzeigengruppe', (l) => l.adset],
+    ['Creative', (l) => l.creative],
+    ['Placement', (l) => l.placement],
+    ...(hasTickets ? [['Ticket am', (l) => l.ticketAt || '']] : []),
+    ...(hasQuality ? [['Quality-Score', (l) => l.quality?.score ?? ''], ['Tier', (l) => l.quality?.tier ?? '']] : []),
+    ...answerKeys.map((k) => [answerLabel(k), (l) => l.answers?.[k] ?? '']),
+  ];
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = leads.map((l) =>
-    [l.name, l.email, l.phone, l.wonAt, l.ticketAt, l.sourceType, l.campaign, l.adset, l.creative, l.placement, l.quality?.score ?? '', l.quality?.tier ?? '', l.answers?.income, l.answers?.employment, l.answers?.realEstate, l.answers?.invested, l.answers?.relationship].map(esc).join(';')
-  );
-  const csv = [head.map(esc).join(';'), ...lines].join('\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const lines = leads.map((l) => cols.map(([, get]) => esc(get(l))).join(';'));
+  const csv = [cols.map(([h]) => esc(h)).join(';'), ...lines].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
+  const slug = String(PROJECT.name || 'leads').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   a.href = url;
-  a.download = `mmv-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `${slug}-leads-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -82,26 +116,25 @@ export default function LeadsTable({ leads, tiers }) {
                     <div className="lead-email">{l.email}</div>
                   </td>
                   <td className="nowrap sec" data-label="Lead am">{fmtDate(l.wonAt)}</td>
-                  <td data-label="Quelle"><span className={`pill ${l.sourceType}`}>{l.sourceType === 'paid' ? 'Ads' : 'Organisch'}</span></td>
+                  {hasFunnels && <td className="sec" data-label="Funnel">{l.funnel ? <span className="pill funnel">{l.funnel}</span> : <span className="muted">–</span>}</td>}
+                  <td data-label="Quelle"><span className={`pill ${l.sourceType}`}>{sourceText(l)}</span></td>
                   <td className="trunc sec" data-label="Kampagne" title={l.campaign}>{l.campaign}</td>
                   <td className="trunc sec" data-label="Anzeigengruppe" title={l.adset}>{l.adset}</td>
                   <td className="trunc sec" data-label="Creative" title={l.creative}>{l.creative}</td>
                   <td className="trunc sec" data-label="Placement" title={l.placement}>{l.placement}</td>
-                  <td className="sec" data-label="VIP">{l.hasTicket ? <span className="pill vip">VIP</span> : <span className="muted">–</span>}</td>
-                  <td data-label="Qualität"><QualityBadge quality={l.quality} tiers={tiers} /></td>
+                  {hasTickets && <td className="sec" data-label="Ticket">{l.hasTicket ? <span className="pill vip">Ticket</span> : <span className="muted">–</span>}</td>}
+                  {hasQuality && <td data-label="Qualität"><QualityBadge quality={l.quality} tiers={tiers} /></td>}
                 </tr>
                 {open === l.email + i && l.answers && (
                   <tr className="detail-row">
                     <td colSpan={COLS.length}>
                       <div className="answers">
-                        <Answer label="Beschäftigung" value={l.answers.employment} />
-                        <Answer label="Monatliches Einkommen" value={l.answers.income} />
-                        <Answer label="Immobilien im Besitz" value={l.answers.realEstate} />
-                        <Answer label="Investiertes Kapital" value={l.answers.invested} />
-                        <Answer label="Beziehungsstand" value={l.answers.relationship} />
+                        {Object.entries(l.answers)
+                          .filter(([, v]) => v)
+                          .map(([k, v]) => (
+                            <Answer key={k} label={answerLabel(k)} value={v} wide={String(v).length > 60} />
+                          ))}
                         <Answer label="Telefon" value={l.phone} />
-                        <Answer label="Größte Herausforderung" value={l.answers.challenge} wide />
-                        <Answer label="Erwartung an die 4 Abende" value={l.answers.expectation} wide />
                         {l.quality && (
                           <div className="answer wide">
                             <div className="answer-label">Quality-Breakdown</div>

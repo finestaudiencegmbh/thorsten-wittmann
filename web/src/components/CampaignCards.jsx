@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { fmtEur, fmtInt, fmtPct, entityKey, minuteSeriesFromEvents } from '../lib.js';
+import { hasTickets, hasQuality } from '../config.js';
 import GraphPanel from './GraphPanel.jsx';
 
 /** Kleiner "Grafik"-Button (öffnet die Zeitreihen-Ansicht). */
@@ -27,18 +28,20 @@ function Metrics({ n, leadHidden }) {
       items: [
         ['Adspend', fmtEur(n.spend)],
         ['Leads', lead(fmtInt(n.leads))],
-        ['Tickets', lead(fmtInt(n.tickets))],
+        ...(hasTickets ? [['Tickets', lead(fmtInt(n.tickets))]] : []),
         ['€/Lead', lead(fmtEur(n.cpl))],
-        ['€/Ticket', lead(fmtEur(n.cpt))],
+        ...(hasTickets ? [['€/Ticket', lead(fmtEur(n.cpt))]] : []),
       ],
     },
     {
-      title: 'Qualität & Funnel', cls: 'g-quality',
+      title: hasQuality ? 'Qualität & Funnel' : 'Funnel', cls: 'g-quality',
       items: [
-        ['Quali-Rate', lead(fmtPct(n.qualifiedRate))],
-        ['Ø Quali', lead(fmtScore(n.avgQuality))],
+        ...(hasQuality ? [
+          ['Quali-Rate', lead(fmtPct(n.qualifiedRate))],
+          ['Ø Quali', lead(fmtScore(n.avgQuality))],
+        ] : []),
         ['CVR Start', lead(fmtPct(n.cvrStart))],
-        ['CVR Ticket', lead(fmtPct(n.cvrTicket))],
+        ...(hasTickets ? [['CVR Ticket', lead(fmtPct(n.cvrTicket))]] : []),
       ],
     },
     {
@@ -138,7 +141,7 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                             <span className="cc-sm-item"><b>{fmtEur(a.spend)}</b> Adspend</span>
                             <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtInt(a.leads)}</b> Leads</span>
                             <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtEur(a.cpl)}</b> CPL</span>
-                            <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtPct(a.qualifiedRate)}</b> Quali</span>
+                            {hasQuality && <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtPct(a.qualifiedRate)}</b> Quali</span>}
                           </span>
                           {hasGraph('adset', { campaign: c.name, adset: a.name }) && <GraphBtn onClick={() => openGraph('adset', { campaign: c.name, adset: a.name }, a.name)} />}
                         </div>
@@ -152,8 +155,8 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                                   <span>Adspend</span>
                                   <span>Leads</span>
                                   <span>CPL</span>
-                                  <span>Tickets</span>
-                                  <span>Quali-Rate</span>
+                                  {hasTickets && <span>Tickets</span>}
+                                  {hasQuality && <span>Quali-Rate</span>}
                                   <span>CVR Start</span>
                                   <span>CTR ausg.</span>
                                 </div>
@@ -168,8 +171,8 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                                     <span>{fmtEur(ad.spend)}</span>
                                     <span>{leadHidden ? '–' : fmtInt(ad.leads)}</span>
                                     <span>{leadHidden ? '–' : fmtEur(ad.cpl)}</span>
-                                    <span>{leadHidden ? '–' : fmtInt(ad.tickets)}</span>
-                                    <span>{leadHidden ? '–' : fmtPct(ad.qualifiedRate)}</span>
+                                    {hasTickets && <span>{leadHidden ? '–' : fmtInt(ad.tickets)}</span>}
+                                    {hasQuality && <span>{leadHidden ? '–' : fmtPct(ad.qualifiedRate)}</span>}
                                     <span>{leadHidden ? '–' : fmtPct(ad.cvrStart)}</span>
                                     <span>{fmtPct(ad.outboundCtr)}</span>
                                   </div>

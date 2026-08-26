@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { hasTickets, hasQuality, TRAFFIC_SOURCES } from '../config.js';
 import { uniqueValues, answerValues } from '../lib.js';
 
 function Select({ label, value, onChange, options, allLabel = 'Alle' }) {
@@ -37,7 +38,12 @@ export default function Filters({ leads, filters, setFilters, tiers, onReset }) 
           <span>Quelle</span>
           <select value={filters.sourceType} onChange={(e) => set({ sourceType: e.target.value })}>
             <option value="all">Alle</option>
-            <option value="paid">Bezahlt (Ads)</option>
+            {/* Bezahlte Quellen OHNE Kostendaten sind ein eigener Wert - sie
+                sind weder 'paid' (kein Spend) noch organisch. */}
+            <option value="paid">Bezahlt · {TRAFFIC_SOURCES.find((x) => x.hasSpend)?.label || 'Ads'}</option>
+            {TRAFFIC_SOURCES.some((x) => x.paid && !x.hasSpend) && (
+              <option value="other-paid">Bezahlt · {TRAFFIC_SOURCES.filter((x) => x.paid && !x.hasSpend).map((x) => x.label).join(' / ')}</option>
+            )}
             <option value="organic">Organisch</option>
           </select>
         </label>
@@ -59,21 +65,25 @@ export default function Filters({ leads, filters, setFilters, tiers, onReset }) 
             <Select label="Placement" value={filters.placement} onChange={(v) => set({ placement: v })} options={uniqueValues(leads, 'placement')} />
           </div>
 
-          <div className="filters-row">
-            <Select label="Einkommen" value={filters.income} onChange={(v) => set({ income: v })} options={answerValues(leads, 'income')} />
-            <Select label="Immobilien" value={filters.realEstate} onChange={(v) => set({ realEstate: v })} options={answerValues(leads, 'realEstate')} />
-            <Select label="Beschäftigung" value={filters.employment} onChange={(v) => set({ employment: v })} options={answerValues(leads, 'employment')} />
-          </div>
+          {hasQuality && (
+            <div className="filters-row">
+              <Select label="Einkommen" value={filters.income} onChange={(v) => set({ income: v })} options={answerValues(leads, 'income')} />
+              <Select label="Immobilien" value={filters.realEstate} onChange={(v) => set({ realEstate: v })} options={answerValues(leads, 'realEstate')} />
+              <Select label="Beschäftigung" value={filters.employment} onChange={(v) => set({ employment: v })} options={answerValues(leads, 'employment')} />
+            </div>
+          )}
 
-          <div className="filters-row tier-row">
-            <span className="tier-label">Qualität:</span>
-            {tiers.map((t) => (
-              <button key={t.key} className={`tier-chip ${filters.tiers.includes(t.key) ? 'active' : ''}`} style={filters.tiers.includes(t.key) ? { background: t.color, borderColor: t.color } : { borderColor: t.color, color: t.color }} onClick={() => toggleTier(t.key)}>
-                {t.label}
-              </button>
-            ))}
-            <button className={`tier-chip ${filters.tiers.includes('none') ? 'active' : ''}`} onClick={() => toggleTier('none')}>ohne Score</button>
-          </div>
+          {hasQuality && (
+            <div className="filters-row tier-row">
+              <span className="tier-label">Qualität:</span>
+              {tiers.map((t) => (
+                <button key={t.key} className={`tier-chip ${filters.tiers.includes(t.key) ? 'active' : ''}`} style={filters.tiers.includes(t.key) ? { background: t.color, borderColor: t.color } : { borderColor: t.color, color: t.color }} onClick={() => toggleTier(t.key)}>
+                  {t.label}
+                </button>
+              ))}
+              <button className={`tier-chip ${filters.tiers.includes('none') ? 'active' : ''}`} onClick={() => toggleTier('none')}>ohne Score</button>
+            </div>
+          )}
         </div>
       )}
     </div>

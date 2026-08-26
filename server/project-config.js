@@ -62,6 +62,16 @@ export const DEFAULT_CONFIG = {
       relationship: ['beziehungsstand'],
       expectation: ['was erhoffst du dir von den 4 abenden'],
     },
+    // Anzeige-Beschriftung der Antwortfelder (Lead-Detailansicht, CSV-Export).
+    questionnaireLabels: {
+      employment: 'Beschäftigung',
+      challenge: 'Größte Herausforderung',
+      income: 'Monatliches Einkommen',
+      realEstate: 'Immobilien im Besitz',
+      invested: 'Investiertes Kapital',
+      relationship: 'Beziehungsstand',
+      expectation: 'Erwartung',
+    },
     overviewColumns: {
       status: ['status'],
       adset: ['anzeigengruppe'],

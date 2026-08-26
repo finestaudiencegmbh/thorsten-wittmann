@@ -1,0 +1,191 @@
+/**
+ * Tests fuer die Generalisierung: Feature-Flags, konfigurierbare Sheet-Spalten,
+ * Funnel-Zuordnung und die Aufteilung der Traffic-Quellen.
+ *
+ * Gegenprobe zu parser.test.mjs: dort laeuft alles mit den DEFAULTS (Tickets +
+ * Fragebogen an), hier mit abgeschalteten Flags und einem anders aufgebauten
+ * Sheet. Ausfuehren: node server/project-config.test.mjs
+ */
+import assert from 'node:assert/strict';
+import { parseSheets, funnelForTab, _internal } from './parser.js';
+import { buildDataset } from './build.js';
+import { combineMetaWithLeads } from './combine.js';
+import { DEFAULT_CONFIG, loadProjectConfig, publicConfig } from './project-config.js';
+
+// --- Projekt-Config ohne Tickets/Fragebogen, mit zwei Funnels ---------------
+const CFG = {
+  ...DEFAULT_CONFIG,
+  name: 'Testprojekt',
+  features: { hasTickets: false, hasQuality: false },
+  funnels: [
+    { id: 'CCC', label: 'CCC', sheetTab: 'ccc', match: ['ccc'] },
+    { id: 'AKD', label: 'AKD', sheetTab: 'akd', match: ['akd'] },
+  ],
+  sheet: {
+    ...DEFAULT_CONFIG.sheet,
+    leadColumns: { ...DEFAULT_CONFIG.sheet.leadColumns, wonAt: ['gewonnen am', 'datum'] },
+    decodePlusAsSpace: true,
+  },
+  trafficSources: [
+    { id: 'meta', label: 'Meta', paid: true, hasSpend: true, match: ['meta', 'facebook', 'instagram'], mediums: ['ppc', 'cpc', 'paid'] },
+    { id: 'google', label: 'Google', paid: true, hasSpend: false, match: ['google', 'youtube'], mediums: ['cpc', 'ppc', 'paid'] },
+  ],
+};
+
+const HEAD = ['Datum', 'Vorname', 'E-Mail', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+const sheets = [
+  { title: 'Performance', values: [] },
+  { title: 'Leads CCC', values: [HEAD,
+    // plus-kodiert (wie im echten Sheet)
+    ['2026-08-19 21:37:05', 'Dora', 'a@x.de', 'meta', 'ppc', 'CCC+EWeb+|+CBO+|+LeadCon', 'DE+|+40-65', ''],
+    // dieselbe Struktur, aber mit echten Leerzeichen
+    ['2026-08-20 04:11:02', 'Angela', 'b@x.de', 'meta', 'ppc', 'DP | CCC | ABO | 190826', 'AG1: DP | CCC | Broad', ''],
+    // Google Ads: bezahlt, aber ohne Kostendaten
+    ['2026-08-24 16:09:03', 'Andreas', 'c@x.de', 'googled', 'cpc', '24098447409', '', '819713222835'],
+    // Reoptin-Mail: kein Funnel-Kuerzel in den UTMs -> Funnel MUSS vom Tab kommen
+    ['2026-08-24 16:30:09', 'Steff', 'd@x.de', 'reoptin', 'email', 'no-show', '', 'mail 3'],
+  ] },
+  { title: 'Leads AKD', values: [HEAD,
+    ['2026-08-19 23:14:05', 'Anna', 'e@x.de', 'meta', 'ppc', 'DP+|+AKD+|+ABO+Leads', 'AG2:+DP+|+AKD+|+SIT', ''],
+    ['2026-08-26 08:57:20', 'Moana', 'f@x.de', 'akd+evergreen', 'email', 'no-show', '', 'mail 3'],
+  ] },
+];
+
+// --- 1) Spalten-Mapping: "Datum" statt "Gewonnen am" ------------------------
+const parsed = parseSheets(sheets, CFG);
+assert.equal(parsed.leads.length, 6, 'alle Lead-Zeilen erkannt (Header "Datum")');
+assert.equal(parsed.tickets.length, 0, 'ohne hasTickets kein Ticket-Tab');
+
+// Gegenprobe: mit den DEFAULTS (nur "Gewonnen am") wird dieses Sheet NICHT erkannt
+assert.equal(parseSheets(sheets, DEFAULT_CONFIG).leads.length, 0,
+  'ohne konfigurierten Alias bleibt das Sheet unerkannt');
+
+// --- 2) Plus-Dekodierung ----------------------------------------------------
+assert.equal(parsed.leads[0].utm.campaign, 'CCC EWeb | CBO | LeadCon',
+  'plus-kodierte UTM wird zu echten Leerzeichen aufgeloest');
+assert.equal(parsed.leads[1].utm.campaign, 'DP | CCC | ABO | 190826',
+  'bereits korrekte UTM bleibt unveraendert');
+assert.equal(_internal.decodePlus('A+|+B'), 'A | B');
+// Ohne das Flag bleibt der Rohwert stehen
+const noDecode = parseSheets(sheets, { ...CFG, sheet: { ...CFG.sheet, decodePlusAsSpace: false } });
+assert.equal(noDecode.leads[0].utm.campaign, 'CCC+EWeb+|+CBO+|+LeadCon');
+
+// --- 3) utm_content ---------------------------------------------------------
+assert.equal(parsed.leads[3].utm.content, 'mail 3', 'utm_content wird gelesen');
+
+// --- 4) Funnel kommt vom Tab, nicht vom Kampagnennamen ----------------------
+assert.equal(funnelForTab('Leads CCC', CFG), 'CCC');
+assert.equal(funnelForTab('Leads AKD', CFG), 'AKD');
+assert.equal(funnelForTab('Performance', CFG), null);
+assert.deepEqual(parsed.leads.map((l) => l.funnel), ['CCC', 'CCC', 'CCC', 'CCC', 'AKD', 'AKD']);
+// Der entscheidende Fall: Leads OHNE Funnel-Kuerzel in den UTMs
+const reoptin = parsed.leads[3];
+assert.ok(!/ccc/i.test(reoptin.utm.campaign), 'Testfall hat wirklich kein Kuerzel in der UTM');
+assert.equal(reoptin.funnel, 'CCC', 'Funnel trotzdem gesetzt (aus dem Tab)');
+
+// --- 5) Traffic-Buckets: Meta / Google / Organisch --------------------------
+const ds = buildDataset(parsed, { weights: {}, tiers: [] }, CFG);
+assert.deepEqual(ds.leads.map((l) => l.sourceType),
+  ['paid', 'paid', 'other-paid', 'organic', 'paid', 'organic']);
+assert.deepEqual(ds.leads.map((l) => l.sourceBucket),
+  ['meta', 'meta', 'google', 'organic', 'meta', 'organic']);
+assert.equal(ds.counts.paidLeads, 3);
+assert.equal(ds.counts.otherPaidLeads, 1, 'Google zaehlt NICHT als bezahlt-mit-Kosten');
+assert.equal(ds.counts.organicLeads, 2, 'Google zaehlt auch NICHT als organisch');
+assert.deepEqual(ds.counts.byFunnel, { CCC: 4, AKD: 2 });
+
+// Google-Leads bekommen ein sprechendes Quellen-Label statt "(direkt)"
+const g = ds.leads.find((l) => l.sourceBucket === 'google');
+assert.equal(g.organicCampaign, 'Google');
+
+// --- 6) Ticket-/Quali-Felder verschwinden vollstaendig ----------------------
+for (const l of ds.leads) {
+  for (const k of ['hasTicket', 'ticketAt', 'quality', 'answers', 'ticketCampaign']) {
+    assert.ok(!(k in l), `Feld "${k}" darf bei deaktivierten Flags nicht existieren`);
+  }
+}
+assert.ok(!('tickets' in ds.counts));
+assert.ok(!('scored' in ds.counts));
+
+// --- 6b) Quellen-Erkennung gegen alle real vorkommenden source/medium-Paare -
+// Dieselbe Plattform taucht bezahlt UND organisch auf. Ohne die Medium-Pruefung
+// wuerde "instagram/organic" als bezahltes Meta gelten und den CPL verfaelschen.
+const PAIRS = [
+  ['meta', 'ppc', 'CCC+EWeb+|+CBO', 'paid', 'meta'],
+  ['google', 'cpc', '24094816535', 'other-paid', 'google'],
+  ['googled', 'cpc', '24098447409', 'other-paid', 'google'],
+  ['googleg', 'cpc', '24098447409', 'other-paid', 'google'],
+  ['googleytis', 'cpc', '23379366900', 'other-paid', 'google'],
+  ['reoptin', 'email', 'no-show', 'organic', 'organic'],
+  ['akd+evergreen', 'email', 'no-show', 'organic', 'organic'],
+  ['newsletter', 'email', 'FF-Mail_14.08.', 'organic', 'organic'],
+  ['youtube.com', 'social', 'FF+Video', 'organic', 'organic'],   // Referral, keine Ads
+  ['instagram', 'organic', 'akd-bio', 'organic', 'organic'],     // Bio-Link, keine Ads
+  ['', '', '', 'organic', 'organic'],
+];
+const pairRows = PAIRS.map(([src, med, camp], i) =>
+  [`2026-08-2${i % 9} 10:00:00`, `P${i}`, `p${i}@x.de`, src, med, camp, '', '']);
+const pairDs = buildDataset(
+  parseSheets([{ title: 'Leads CCC', values: [HEAD, ...pairRows] }], CFG),
+  { weights: {}, tiers: [] },
+  CFG,
+);
+PAIRS.forEach(([src, med, , expType, expBucket], i) => {
+  const l = pairDs.leads[i];
+  assert.equal(l.sourceType, expType, `${src || '(leer)'}/${med || '(leer)'} -> sourceType`);
+  assert.equal(l.sourceBucket, expBucket, `${src || '(leer)'}/${med || '(leer)'} -> bucket`);
+});
+
+// --- 7) Funnel-Ansicht in combine ------------------------------------------
+const meta = {
+  entities: [
+    { campaignId: 'c1', campaign: 'DP | CCC | ABO | 190826', adsetId: 'a1', adset: 'AG1: DP | CCC | Broad', adId: 'ad1', creative: 'S1', spend: 100, impressions: 10000, clicks: 200, cpm: 10, uniqueOutboundClicks: 150 },
+    { campaignId: 'c2', campaign: 'DP | AKD | ABO Leads', adsetId: 'a2', adset: 'AG2: DP | AKD | SIT', adId: 'ad2', creative: 'S2', spend: 400, impressions: 20000, clicks: 300, cpm: 20, uniqueOutboundClicks: 250 },
+  ],
+  daily: [{ date: '2026-08-19', spend: 500, impressions: 30000, clicks: 500 }],
+  dailyEntities: [
+    { date: '2026-08-19', campaign: 'DP | CCC | ABO | 190826', adset: 'AG1: DP | CCC | Broad', creative: 'S1', spend: 100, impressions: 10000, clicks: 200, uoc: 150 },
+    { date: '2026-08-19', campaign: 'DP | AKD | ABO Leads', adset: 'AG2: DP | AKD | SIT', creative: 'S2', spend: 400, impressions: 20000, clicks: 300, uoc: 250 },
+  ],
+  campaignStatus: {
+    'DP | CCC | ABO | 190826': { status: 'ACTIVE', active: true, objective: 'OUTCOME_LEADS' },
+    'DP | AKD | ABO Leads': { status: 'ACTIVE', active: true, objective: 'OUTCOME_LEADS' },
+  },
+  adsetStatus: {}, adStatus: {}, adList: [],
+};
+const features = { hasTickets: false, hasQuality: false };
+
+const all = combineMetaWithLeads(meta, ds.leads, { features });
+assert.equal(all.totals.spend, 500, 'Gesamtsicht summiert beide Funnels');
+
+const ccc = combineMetaWithLeads(meta, ds.leads, { features, funnel: CFG.funnels[0] });
+assert.equal(ccc.totals.spend, 100, 'CCC-Sicht enthaelt nur den CCC-Spend');
+assert.equal(ccc.daily.spend.reduce((s, d) => s + d.spend, 0), 100,
+  'Tagesreihe wird je Funnel neu aggregiert (nicht die Kontosumme)');
+assert.equal(ccc.hierarchy.length, 1);
+assert.match(ccc.hierarchy[0].name, /CCC/);
+
+const akd = combineMetaWithLeads(meta, ds.leads, { features, funnel: CFG.funnels[1] });
+assert.equal(akd.totals.spend, 400);
+assert.equal(ccc.totals.spend + akd.totals.spend, all.totals.spend,
+  'Summe der Funnels == Hauptdashboard');
+
+// Ticket-Kennzahlen fehlen in der Hierarchie
+for (const c of all.hierarchy) {
+  for (const k of ['tickets', 'cpt', 'cvrTicket', 'qualifiedRate', 'avgQuality']) {
+    assert.ok(!(k in c), `Hierarchie darf "${k}" nicht enthalten`);
+  }
+  assert.ok('cpl' in c, 'CPL bleibt erhalten');
+}
+
+// --- 8) Config-Laden und publicConfig --------------------------------------
+const live = loadProjectConfig();
+assert.ok(live.name, 'project.config.json wird geladen');
+const pub = publicConfig(CFG);
+assert.deepEqual(pub.features, { hasTickets: false, hasQuality: false });
+assert.deepEqual(pub.funnels.map((f) => f.id), ['CCC', 'AKD']);
+assert.ok(!('sheet' in pub), 'Sheet-Interna gehen nicht ans Frontend');
+
+console.log('✓ Alle Projekt-Config-/Flag-/Funnel-Tests bestanden');
+console.log(`  Leads: ${ds.counts.leads} (${ds.counts.paidLeads} Meta · ${ds.counts.otherPaidLeads} Google · ${ds.counts.organicLeads} organisch)`);
+console.log(`  Funnels: CCC ${ccc.totals.spend} € · AKD ${akd.totals.spend} € · gesamt ${all.totals.spend} €`);

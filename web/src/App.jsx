@@ -12,6 +12,7 @@ import DateRangePicker from './components/DateRangePicker.jsx';
 import SourcesView from './components/SourcesView.jsx';
 import ChatBot from './components/ChatBot.jsx';
 import { fmtEur, fmtInt } from './lib.js';
+import { PROJECT, BRANDING, FUNNELS, hasFunnels, hasTickets, hasQuality, applyBranding } from './config.js';
 
 const NAV = [
   { key: 'dashboard', label: 'Dashboard', icon: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z' },
@@ -23,7 +24,13 @@ const NAV = [
 const EMPTY_FILTERS = {
   search: '', sourceType: 'all', campaign: '', adset: '', creative: '', placement: '',
   income: '', realEstate: '', employment: '', from: '', to: '', onlyTickets: false, tiers: [],
+  funnel: '',
 };
+
+// Hauptdashboard = alle Funnels zusammen, danach je ein Unterreiter.
+const FUNNEL_TABS = hasFunnels
+  ? [{ id: '', label: 'Gesamt' }, ...FUNNELS.map((f) => ({ id: f.id, label: f.label || f.id }))]
+  : [];
 
 export default function App() {
   const [data, setData] = useState(null);
@@ -33,6 +40,11 @@ export default function App() {
   const [range, setRange] = useState({ from: '', to: '' });
   const [tab, setTab] = useState('campaign');
   const [view, setView] = useState('dashboard');
+  const [funnel, setFunnel] = useState('');
+
+  // Akzentfarbe/Flaechenton aus project.config.json in die CSS-Variablen.
+  useEffect(() => { applyBranding(BRANDING); }, []);
+  useEffect(() => { document.title = `${PROJECT.name || 'Dashboard'} · ${PROJECT.subtitle || 'Dashboard'}`; }, []);
 
   const load = async (refresh = false, r = range) => {
     setLoading(true);
@@ -56,9 +68,19 @@ export default function App() {
   };
 
   const tiers = data?.scoring?.tiers || [];
-  const fb = data?.fb || null;
+  // Bei aktivem Funnel die je Funnel vorberechnete Meta-Auswertung nutzen -
+  // sonst waeren Spend und Hierarchie die des gesamten Kontos.
+  const fb = useMemo(() => {
+    const base = data?.fb || null;
+    if (!base || !funnel) return base;
+    const fv = base.funnels?.[funnel];
+    return fv ? { ...base, ...fv } : base;
+  }, [data, funnel]);
   const hasFb = Boolean(fb?.byDim);
-  const filtered = useMemo(() => (data ? applyFilters(data.leads, filters) : []), [data, filters]);
+  const filtered = useMemo(
+    () => (data ? applyFilters(data.leads, { ...filters, funnel }) : []),
+    [data, filters, funnel],
+  );
   const kpis = useMemo(() => (data ? computeKpis(filtered, data.overviewByAdset, fb) : null), [data, filtered, fb]);
   const dist = useMemo(() => (data ? tierDistribution(filtered, tiers) : {}), [data, filtered, tiers]);
   // Stunden-Raster, wenn der gewählte Zeitraum genau EIN Tag ist (0–24 Uhr).
@@ -125,10 +147,10 @@ export default function App() {
     <div className="layout">
       <aside className="sidebar">
         <div className="brand">
-          <img className="brand-logo" src="/logo.svg" alt="MoneyMaker" width="40" height="40" />
+          <img className="brand-logo" src={BRANDING.logo || '/logo.svg'} alt={PROJECT.name || ''} width="40" height="40" />
           <div className="brand-text">
-            <div className="brand-title">MoneyMaker</div>
-            <div className="brand-sub">Workshop · 15.–18.06.</div>
+            <div className="brand-title">{PROJECT.name}</div>
+            {PROJECT.subtitle && <div className="brand-sub">{PROJECT.subtitle}</div>}
           </div>
         </div>
         <nav className="nav">
@@ -147,10 +169,10 @@ export default function App() {
       <main className="content">
         <header className="topbar">
           <div className="topbar-title">
-            <img className="topbar-logo" src="/logo.svg" alt="" width="34" height="34" />
+            <img className="topbar-logo" src={BRANDING.logo || '/logo.svg'} alt="" width="34" height="34" />
             <div>
               <h1>{NAV.find((n) => n.key === view)?.label}</h1>
-              <p className="subtitle">Lead- &amp; VIP-Ticket-Dashboard</p>
+              <p className="subtitle">{PROJECT.subtitle}</p>
             </div>
             <div className="topbar-badges">
               {data?.source === 'demo' && <span className="demo-badge" title="Es werden synthetische Beispieldaten angezeigt.">DEMO</span>}
@@ -167,6 +189,31 @@ export default function App() {
             </button>
           </div>
         </header>
+
+        {/* Funnel-Unterreiter: "Gesamt" summiert alle Funnels, danach je Funnel
+            eine gefilterte Sicht (Leads ueber den Sheet-Tab, Meta-Spend ueber
+            den Kampagnennamen). */}
+        {FUNNEL_TABS.length > 1 && (
+          <div className="funnel-tabs" role="tablist" aria-label="Funnel">
+            {FUNNEL_TABS.map((f) => {
+              const count = f.id
+                ? (data?.leads || []).filter((l) => l.funnel === f.id).length
+                : (data?.leads || []).length;
+              return (
+                <button
+                  key={f.id || 'all'}
+                  role="tab"
+                  aria-selected={funnel === f.id}
+                  className={`funnel-tab ${funnel === f.id ? 'active' : ''}`}
+                  onClick={() => setFunnel(f.id)}
+                >
+                  {f.label}
+                  <span className="funnel-count">{fmtInt(count)}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {error && (
           <div className="error-banner">
@@ -197,27 +244,27 @@ export default function App() {
               <>
                 {/* Graphen oben: Leads & Tickets breit, darunter Spend + CPL nebeneinander */}
                 <section className="panel">
-                  <div className="panel-head"><div><h2>Verlauf</h2><span className="panel-sub">{hourlyDay ? 'Leads/Tickets im Tagesverlauf (0–24 Uhr, minutengenau) · Maus zum Anzeigen' : 'Leads/Tickets (Sheet) & Ad-Spend/CPL (Facebook) pro Tag · Maus zum Anzeigen'}</span></div></div>
+                  <div className="panel-head"><div><h2>Verlauf</h2><span className="panel-sub">{hourlyDay ? `Leads${hasTickets ? '/Tickets' : ''} im Tagesverlauf (0–24 Uhr, minutengenau) · Maus zum Anzeigen` : `Leads${hasTickets ? '/Tickets' : ''} (Sheet) & Ad-Spend/CPL (Facebook) pro Tag · Maus zum Anzeigen`}</span></div></div>
                   <div className="charts-stack">
                     {hourlyDay ? (
                       <>
-                        <IntradayChart title="Leads & Tickets im Tagesverlauf" formatY={(v) => fmtInt(Math.round(v))}
+                        <IntradayChart title={hasTickets ? 'Leads & Tickets im Tagesverlauf' : 'Leads im Tagesverlauf'} formatY={(v) => fmtInt(Math.round(v))}
                           series={[
                             { key: 'leads', label: 'Leads', color: '#5ec8d8', data: leadDaily.map((d) => ({ date: d.date, value: d.leads })) },
-                            { key: 'tickets', label: 'VIP-Tickets', color: '#6fcf97', data: leadDaily.map((d) => ({ date: d.date, value: d.tickets })) },
+                            ...(hasTickets ? [{ key: 'tickets', label: 'Tickets', color: '#6fcf97', data: leadDaily.map((d) => ({ date: d.date, value: d.tickets })) }] : []),
                           ]} />
-                        <div className="info-note">Ad-Spend &amp; CPL sind aktuell nur pro Tag verfügbar – die Stundenwerte dafür folgen. Leads, Tickets &amp; Lead-Qualität siehst du oben minutengenau.</div>
+                        <div className="info-note">Ad-Spend &amp; CPL sind aktuell nur pro Tag verfügbar – die Stundenwerte dafür folgen. Leads siehst du oben minutengenau.</div>
                       </>
                     ) : (
                       <>
-                        <TimeChart title="Leads & Tickets pro Tag" formatY={(v) => fmtInt(Math.round(v))}
+                        <TimeChart title={hasTickets ? 'Leads & Tickets pro Tag' : 'Leads pro Tag'} formatY={(v) => fmtInt(Math.round(v))}
                           series={[
                             { key: 'leads', label: 'Leads', color: '#5ec8d8', data: leadDaily.map((d) => ({ date: d.date, value: d.leads })) },
-                            { key: 'tickets', label: 'VIP-Tickets', color: '#6fcf97', data: leadDaily.map((d) => ({ date: d.date, value: d.tickets })) },
+                            ...(hasTickets ? [{ key: 'tickets', label: 'Tickets', color: '#6fcf97', data: leadDaily.map((d) => ({ date: d.date, value: d.tickets })) }] : []),
                           ]} />
                         <div className="charts-grid">
                           <TimeChart title="Ad-Spend pro Tag" formatY={(v) => fmtEur(Math.round(v))}
-                            series={[{ key: 'spend', label: 'Ad-Spend', color: '#d0bb5a', data: (hasFb && fb.daily ? fb.daily.spend : []).map((d) => ({ date: d.date, value: d.spend })) }]} />
+                            series={[{ key: 'spend', label: 'Ad-Spend', color: 'var(--accent)', data: (hasFb && fb.daily ? fb.daily.spend : []).map((d) => ({ date: d.date, value: d.spend })) }]} />
                           <TimeChart title="CPL pro Tag" formatY={(v) => fmtEur(Math.round(v))}
                             series={[{ key: 'cpl', label: 'CPL (Ads)', color: '#a78bfa', data: cplDaily.map((d) => ({ date: d.date, value: d.value })) }]} />
                         </div>
@@ -298,7 +345,13 @@ export default function App() {
             {view === 'sources' && <SourcesView leads={filtered} />}
 
             <footer className="footer">
-              {data.counts.leads} Leads · {data.counts.paidLeads} bezahlt · {data.counts.tickets} VIP-Tickets · {data.counts.scored} bewertet
+              {[
+                `${data.counts.leads} Leads`,
+                `${data.counts.paidLeads} bezahlt`,
+                data.counts.otherPaidLeads ? `${data.counts.otherPaidLeads} ohne Kostendaten` : null,
+                hasTickets ? `${data.counts.tickets} Tickets` : null,
+                hasQuality ? `${data.counts.scored} bewertet` : null,
+              ].filter(Boolean).join(' · ')}
               {' · '}Quelle: {data.source === 'google' ? 'Google Sheet (live)' : 'Demo'}
             </footer>
           </>
