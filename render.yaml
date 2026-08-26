@@ -1,0 +1,50 @@
+# Render.com Blueprint – Ein-Klick-Deployment des Dashboards.
+# Anleitung in der README ("Gehostet teilen"). Secrets (Service-Account,
+# Login) werden NICHT hier gespeichert, sondern beim Deploy abgefragt.
+
+services:
+  - type: web
+    name: mmv-fuatmarta-dashboard
+    runtime: node
+    plan: free
+    # devDependencies (vite) werden für den Build gebraucht -> explizit mitinstallieren
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
+      - key: SPREADSHEET_ID
+        value: 1rxK4s-qh1Enbw5L_Ni37xikPEpFe82-5w_7GT-PX6ng
+      - key: CACHE_TTL_SECONDS
+        value: "900"
+      # --- KI-Chatbot (optional) – Anthropic-API-Key ---
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # --- Login (teilbare URL + Passwort) – beim Deploy ausfüllen ---
+      - key: DASHBOARD_USER
+        sync: false
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      # --- Google-Service-Account als kompletter JSON-Key (eine Zeile) ---
+      # Leer lassen = Demo-Modus. Sobald gesetzt -> echte Sheet-Daten live.
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      # --- Facebook-Ads direkt via Meta Marketing API – optional, leer = aus ---
+      # Hat Vorrang vor Supermetrics, wenn gesetzt.
+      - key: META_ACCESS_TOKEN
+        sync: false
+      - key: META_AD_ACCOUNT_ID
+        sync: false
+      # --- Facebook-Ads via Supermetrics – optional, leer = aus ---
+      - key: SUPERMETRICS_API_KEY
+        sync: false
+      - key: SUPERMETRICS_DS_ACCOUNTS
+        sync: false
+      - key: SUPERMETRICS_DS_USER
+        sync: false
+      - key: SUPERMETRICS_QUERY_JSON
+        sync: false

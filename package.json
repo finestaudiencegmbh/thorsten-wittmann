@@ -1,0 +1,32 @@
+{
+  "name": "mmv-fuatmarta-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lead- & VIP-Ticket-Dashboard für den Fuat & Marta MoneyMaker-Workshop. Liest live aus dem Google Tracking Sheet und wertet Leads nach Kampagne, Anzeigengruppe, Creative, Placement und Lead-Qualität aus.",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "node --watch server/index.js",
+    "dev:web": "vite",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "serve": "npm run build && npm run start",
+    "test": "node server/parser.test.mjs && node server/supermetrics.test.mjs && node server/meta.test.mjs && node server/combine.test.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.11"
+  }
+}

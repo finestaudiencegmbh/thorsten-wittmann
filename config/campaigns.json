@@ -1,0 +1,14 @@
+{
+  "_comment": "Steuert, welche Kampagnen als 'Lead-Kampagnen' gelten. Nur deren Ad-Spend fließt in CPL und Kosten/Ticket der Gesamtübersicht ein. Traffic-/Reichweiten-/Awareness-Kampagnen werden automatisch ausgeschlossen (anhand des Meta-Ziels 'objective'). Der Gesamt-Spend bleibt überall sichtbar.",
+
+  "leadObjectives": ["OUTCOME_LEADS", "LEAD_GENERATION", "OUTCOME_SALES", "CONVERSIONS", "OUTCOME_ENGAGEMENT"],
+  "nonLeadObjectives": ["OUTCOME_TRAFFIC", "LINK_CLICKS", "OUTCOME_AWARENESS", "REACH", "BRAND_AWARENESS", "VIDEO_VIEWS", "OUTCOME_APP_PROMOTION"],
+
+  "_comment_overrides": "Manuelle Korrektur, falls das Meta-Ziel nicht passt. Schlüssel = Kampagnenname (Teilstring, case-insensitiv), Wert = true (zählt als Lead-Kampagne) oder false (Traffic/ausschließen). Overrides haben Vorrang vor dem Ziel.",
+  "overrides": {},
+
+  "_comment_classification": "Lead-Quellen-Klassifizierung (build.js). organicPatterns: kommt einer dieser Begriffe in source/medium/campaign/term vor, gilt der Lead als organisch und wird unter 'organicLabel' zusammengefasst. unattributablePaidLabel: bezahlte Leads mit rein numerischer Source/Campaign (z. B. 52540202640549) sind Paid, aber nicht eindeutig zuordenbar und landen in diesem Sammel-Bucket.",
+  "organicPatterns": ["manychat", "bio", "moneymaker-workshop"],
+  "organicLabel": "(organisch)",
+  "unattributablePaidLabel": "(Paid · nicht zuordenbar)"
+}
