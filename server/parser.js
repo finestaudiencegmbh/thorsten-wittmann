@@ -12,8 +12,44 @@
  */
 import { DEFAULT_CONFIG } from './project-config.js';
 
+/**
+ * HTML-Entities zurueckwandeln. Manche Tracking-Ketten schreiben Sonderzeichen
+ * escaped ins Sheet ("Finanzen &amp; pers. Finanzen"), waehrend die Meta-API den
+ * echten Namen liefert ("Finanzen & pers. Finanzen"). Ohne Rueckwandlung matcht
+ * die Anzeigengruppe nicht und zeigt 0 Leads bei vollem Spend.
+ *
+ * Mehrfach durchlaufen, weil auch doppelt kodierte Werte vorkommen
+ * ("&amp;amp;"). Die Schleife ist auf 3 Durchlaeufe begrenzt, damit unbekannte
+ * Entities nicht endlos wiederholt werden.
+ */
+const NAMED_ENTITIES = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+};
+const ENTITY_RE = /&(#\d+|#[xX][0-9a-fA-F]+|[a-zA-Z]+);/g;
+
+function decodeEntities(input) {
+  let out = String(input ?? '');
+  for (let i = 0; i < 3; i++) {
+    const next = out.replace(ENTITY_RE, (match, ent) => {
+      if (ent[0] === '#') {
+        const code = ent[1] === 'x' || ent[1] === 'X'
+          ? parseInt(ent.slice(2), 16)
+          : parseInt(ent.slice(1), 10);
+        return Number.isFinite(code) && code > 0 && code <= 0x10ffff
+          ? String.fromCodePoint(code)
+          : match;
+      }
+      const key = ent.toLowerCase();
+      return key in NAMED_ENTITIES ? NAMED_ENTITIES[key] : match;
+    });
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+
 const norm = (s) =>
-  String(s ?? '')
+  decodeEntities(s)
     .replace(/ /g, ' ')
     .trim();
 
@@ -274,4 +310,4 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
   return { leads, tickets, overview, warnings };
 }
 
-export const _internal = { classifyHeader, key, num, parseDate, iterateTables, decodePlus, pick };
+export const _internal = { classifyHeader, key, num, parseDate, iterateTables, decodePlus, decodeEntities, pick };

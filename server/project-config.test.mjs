@@ -196,6 +196,44 @@ const wrongAg = wrongC.hierarchy[0].adsets.find((a) => a.name.startsWith('AG1'))
 assert.equal(wrongAg.leads, 0, 'genau der gemeldete Fehler: Spend da, Leads 0');
 assert.ok(wrongAg.spend > 0);
 
+// --- 6d) HTML-Entities in UTM-Werten ---------------------------------------
+// Das Sheet speichert Sonderzeichen escaped ("Finanzen &amp; pers. Finanzen"),
+// die Meta-API liefert den echten Namen. Ohne Rueckwandlung matcht die
+// Anzeigengruppe nicht -> voller Spend, 0 Leads. Doppelte Kodierung
+// ("&amp;amp;") kommt ebenfalls vor.
+assert.equal(_internal.decodeEntities('Finanzen &amp; pers.'), 'Finanzen & pers.');
+assert.equal(_internal.decodeEntities('Finanzen &amp;amp; pers.'), 'Finanzen & pers.');
+assert.equal(_internal.decodeEntities('&unbekannt; bleibt'), '&unbekannt; bleibt');
+assert.equal(_internal.decodeEntities('&#65;&#66;'), 'AB');
+assert.equal(_internal.decodeEntities('ohne Entities'), 'ohne Entities');
+
+const ENT_ADSET = 'DE | 40-65 J | Finanzen & pers. Finanzen | 23.03.2026';
+const entRows = [
+  ['2026-08-19 21:37:00', 'A', 'a@x.de', 'meta', 'ppc', 'CCC+EWeb+|+ABO+|+LeadCon+|+23.03.2026', 'DE+|+40-65+J+|+Finanzen+&amp;+pers.+Finanzen+|+23.03.2026', ''],
+  ['2026-08-19 22:37:00', 'B', 'b@x.de', 'meta', 'ppc', 'CCC+EWeb+|+ABO+|+LeadCon+|+23.03.2026', 'DE+|+40-65+J+|+Finanzen+&amp;amp;+pers.+Finanzen+|+23.03.2026', ''],
+];
+const entDs = buildDataset(
+  parseSheets([{ title: 'Leads CCC', values: [HEAD, ...entRows] }], CFG),
+  { weights: {}, tiers: [] },
+  CFG,
+);
+assert.equal(entDs.leads[0].adset, ENT_ADSET, 'einfach kodiert -> echter Name');
+assert.equal(entDs.leads[1].adset, ENT_ADSET, 'doppelt kodiert -> derselbe Name');
+
+const entMeta = {
+  entities: [{
+    campaignId: 'c1', campaign: 'CCC EWeb | ABO | LeadCon | 23.03.2026',
+    adsetId: 'a1', adset: ENT_ADSET, adId: 'ad1', creative: 'Static 1',
+    spend: 600, impressions: 40000, clicks: 500, cpm: 15, uniqueOutboundClicks: 400,
+  }],
+  daily: [], dailyEntities: [],
+  campaignStatus: { 'CCC EWeb | ABO | LeadCon | 23.03.2026': { status: 'ACTIVE', active: true, objective: 'OUTCOME_LEADS' } },
+  adsetStatus: {}, adStatus: {}, adList: [],
+};
+const entAg = combineMetaWithLeads(entMeta, entDs.leads, { features }).hierarchy[0].adsets[0];
+assert.equal(entAg.leads, 2, 'beide Leads landen auf der Meta-Anzeigengruppe');
+assert.equal(entAg.spend, 600);
+
 // --- 7) Funnel-Ansicht in combine ------------------------------------------
 const meta = {
   entities: [

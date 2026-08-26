@@ -111,6 +111,20 @@ Quellen-Erkennung.
 Nach dem Deploy gegenprüfen: eine Kampagne aufklappen. Steht bei einer
 Anzeigengruppe Adspend, aber 0 Leads, ist die Zuordnung falsch.
 
+### HTML-Entities (automatisch)
+
+Manche Tracking-Ketten schreiben Sonderzeichen escaped ins Sheet:
+
+```
+Finanzen &amp; pers. Finanzen      statt      Finanzen & pers. Finanzen
+Finanzen &amp;amp; pers. Finanzen  (doppelt kodiert, kommt vor)
+```
+
+Die Meta-API liefert den echten Namen. Der Parser wandelt Entities deshalb
+**immer** zurück (mehrfach, für doppelte Kodierung) — dafür gibt es keinen
+Schalter, weil escapte Zeichen in einem Tracking-Sheet nie gewollter Inhalt
+sind. Unbekannte Entities bleiben unangetastet.
+
 ### `decodePlusAsSpace` — vorher prüfen!
 
 Manche Sheets speichern UTM-Werte URL-kodiert:
