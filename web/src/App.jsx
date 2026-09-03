@@ -12,7 +12,7 @@ import DateRangePicker from './components/DateRangePicker.jsx';
 import SourcesView from './components/SourcesView.jsx';
 import ChatBot from './components/ChatBot.jsx';
 import { fmtEur, fmtInt } from './lib.js';
-import { PROJECT, BRANDING, FUNNELS, hasFunnels, hasTickets, hasQuality, applyBranding } from './config.js';
+import { PROJECT, BRANDING, FUNNELS, TRAFFIC_SOURCES, hasFunnels, hasTickets, hasQuality, applyBranding } from './config.js';
 
 const NAV = [
   { key: 'dashboard', label: 'Dashboard', icon: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z' },
@@ -26,6 +26,10 @@ const EMPTY_FILTERS = {
   income: '', realEstate: '', employment: '', from: '', to: '', onlyTickets: false, tiers: [],
   funnel: '',
 };
+
+// Beschriftung der Quellen-Aufteilung auf den Funnel-Reitern.
+const SPEND_SOURCE_LABEL = TRAFFIC_SOURCES.find((s) => s.hasSpend)?.label || 'Ads';
+const OTHER_PAID_LABEL = TRAFFIC_SOURCES.filter((s) => s.paid && !s.hasSpend).map((s) => s.label).join('/');
 
 // Hauptdashboard = alle Funnels zusammen, danach je ein Unterreiter.
 const FUNNEL_TABS = hasFunnels
@@ -77,9 +81,17 @@ export default function App() {
     return fv ? { ...base, ...fv } : base;
   }, [data, funnel]);
   const hasFb = Boolean(fb?.byDim);
+  // Alle aktiven Filter AUSSER dem Funnel. Basis fuer die Zahlen auf den
+  // Funnel-Reitern: jeder Reiter zeigt seinen eigenen Stand, aber immer im
+  // gewaehlten Zeitraum. (Vorher wurde hier der ungefilterte Gesamtbestand
+  // gezaehlt - die Reiter widersprachen dadurch den Charts darunter.)
+  const filteredNoFunnel = useMemo(
+    () => (data ? applyFilters(data.leads, { ...filters, funnel: '' }) : []),
+    [data, filters],
+  );
   const filtered = useMemo(
-    () => (data ? applyFilters(data.leads, { ...filters, funnel }) : []),
-    [data, filters, funnel],
+    () => (funnel ? filteredNoFunnel.filter((l) => l.funnel === funnel) : filteredNoFunnel),
+    [filteredNoFunnel, funnel],
   );
   const kpis = useMemo(() => (data ? computeKpis(filtered, data.overviewByAdset, fb) : null), [data, filtered, fb]);
   const dist = useMemo(() => (data ? tierDistribution(filtered, tiers) : {}), [data, filtered, tiers]);
@@ -197,9 +209,10 @@ export default function App() {
         {FUNNEL_TABS.length > 1 && (
           <div className="funnel-tabs" role="tablist" aria-label="Funnel">
             {FUNNEL_TABS.map((f) => {
-              const count = f.id
-                ? (data?.leads || []).filter((l) => l.funnel === f.id).length
-                : (data?.leads || []).length;
+              const set = f.id ? filteredNoFunnel.filter((l) => l.funnel === f.id) : filteredNoFunnel;
+              const nPaid = set.filter((l) => l.sourceType === 'paid').length;
+              const nOther = set.filter((l) => l.sourceType === 'other-paid').length;
+              const nOrganic = set.filter((l) => l.sourceType === 'organic').length;
               return (
                 <button
                   key={f.id || 'all'}
@@ -208,8 +221,23 @@ export default function App() {
                   className={`funnel-tab ${funnel === f.id ? 'active' : ''}`}
                   onClick={() => setFunnel(f.id)}
                 >
-                  {f.label}
-                  <span className="funnel-count">{fmtInt(count)}</span>
+                  <span className="funnel-tab-head">
+                    {f.label}
+                    <span className="funnel-count">{fmtInt(set.length)}</span>
+                  </span>
+                  <span className="funnel-split">
+                    <span className="fs fs-paid" title={`${fmtInt(nPaid)} Leads aus ${SPEND_SOURCE_LABEL}-Kampagnen (mit Kostendaten)`}>
+                      {fmtInt(nPaid)} {SPEND_SOURCE_LABEL}
+                    </span>
+                    {OTHER_PAID_LABEL && (
+                      <span className="fs fs-other" title={`${fmtInt(nOther)} Leads aus ${OTHER_PAID_LABEL} – bezahlt, aber ohne Kostendaten`}>
+                        {fmtInt(nOther)} {OTHER_PAID_LABEL}
+                      </span>
+                    )}
+                    <span className="fs fs-organic" title={`${fmtInt(nOrganic)} organische Leads (Reoptin, Newsletter, Direkt …)`}>
+                      {fmtInt(nOrganic)} organisch
+                    </span>
+                  </span>
                 </button>
               );
             })}

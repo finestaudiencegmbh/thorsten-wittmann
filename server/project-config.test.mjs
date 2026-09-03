@@ -234,6 +234,38 @@ const entAg = combineMetaWithLeads(entMeta, entDs.leads, { features }).hierarchy
 assert.equal(entAg.leads, 2, 'beide Leads landen auf der Meta-Anzeigengruppe');
 assert.equal(entAg.spend, 600);
 
+// --- 6e) "+" im Namen vs. "+" als kodiertes Leerzeichen --------------------
+// Die Tracking-Kette kodiert Leerzeichen als "+", laesst ein "+" IM Namen aber
+// ebenfalls stehen: "DE+|+40-65+J+|+..." -> der echte Meta-Name ist
+// "DE | 40-65+J | ...". Zeichenweise nicht unterscheidbar, also darf "+" beim
+// Abgleich nicht ins Gewicht fallen.
+const PLUS_ADSET = 'DE | 40-65+J | Finanzen & pers. Finanzen | 23.03.2026';
+const PLUS_CAMPAIGN = 'CCC EWeb | ABO | LeadCon | 18.04.2026';
+const plusRows = [
+  ['2026-09-01 10:00:00', 'A', 'a@x.de', 'meta', 'ppc', 'CCC+EWeb+|+ABO+|+LeadCon+|+18.04.2026', 'DE+|+40-65+J+|+Finanzen+&amp;+pers.+Finanzen+|+23.03.2026', ''],
+  ['2026-09-01 11:00:00', 'B', 'b@x.de', 'meta', 'ppc', 'CCC+EWeb+|+ABO+|+LeadCon+|+18.04.2026', 'DE+|+40-65+J+|+Finanzen+&amp;+pers.+Finanzen+|+23.03.2026', ''],
+];
+const plusDs = buildDataset(
+  parseSheets([{ title: 'Leads CCC', values: [HEAD, ...plusRows] }], CFG),
+  { weights: {}, tiers: [] },
+  CFG,
+);
+const plusMeta = {
+  entities: [{
+    campaignId: 'c1', campaign: PLUS_CAMPAIGN, adsetId: 'a1', adset: PLUS_ADSET,
+    adId: 'ad1', creative: 'Ad A', spend: 69, impressions: 5000, clicks: 60, cpm: 12, uniqueOutboundClicks: 12,
+  }],
+  daily: [], dailyEntities: [],
+  campaignStatus: { [PLUS_CAMPAIGN]: { status: 'ACTIVE', active: true, objective: 'OUTCOME_LEADS' } },
+  adsetStatus: {}, adStatus: {}, adList: [],
+};
+const plusCamp = combineMetaWithLeads(plusMeta, plusDs.leads, { features }).hierarchy[0];
+assert.equal(plusCamp.leads, 2, 'Kampagnen-Ebene');
+assert.equal(plusCamp.adsets[0].name, PLUS_ADSET, 'Anzeige nutzt den echten Meta-Namen');
+assert.equal(plusCamp.adsets[0].leads, 2,
+  'Anzeigengruppe mit "+" im Namen bekommt ihre Leads (vorher 0 bei vollem Spend)');
+assert.equal(plusCamp.adsets[0].spend, 69);
+
 // --- 7) Funnel-Ansicht in combine ------------------------------------------
 const meta = {
   entities: [

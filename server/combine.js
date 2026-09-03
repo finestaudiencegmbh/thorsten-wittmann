@@ -25,6 +25,12 @@ const normKey = (s) =>
   String(s ?? '')
     .replace(/[‐-―−]/g, '-')        // diverse Bindestriche -> "-"
     .replace(/[\s-]*\b(kopie|copy)\b\s*\d*$/i, '')  // "– Kopie", "- Copy 2" am Ende weg
+    // "+" und Leerzeichen gleichwertig behandeln. Grund: die Tracking-Kette
+    // kodiert Leerzeichen als "+", laesst aber ein "+" IM Namen ebenfalls als
+    // "+" stehen ("40-65+J"). Zeichenweise sind beide Faelle nicht zu
+    // unterscheiden - beim Abgleich duerfen sie deshalb nicht ins Gewicht
+    // fallen, sonst matcht die Anzeigengruppe nicht (voller Spend, 0 Leads).
+    .replace(/\+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();

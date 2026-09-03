@@ -19,7 +19,9 @@ function Card({ label, value, sub, accent }) {
 const ACCENT = 'var(--accent)';
 const CYAN = '#5ec8d8';
 const GREEN = '#6fcf97';
-const AMBER = '#e0a33e';
+// Bezahlt-ohne-Kostendaten: bewusst NICHT amber - das lag zu nah am
+// Akzent-Orange und war von 'Bezahlt · Meta' kaum zu unterscheiden.
+const OTHER_PAID = '#a78bfa';
 
 /** Label der Quelle, die echte Kostendaten liefert (heute: Meta). */
 const spendSourceLabel = TRAFFIC_SOURCES.find((s) => s.hasSpend)?.label || 'Ads';
@@ -44,10 +46,10 @@ export default function Kpis({ kpis, dist, tiers, qualityDaily = [] }) {
       {/* Bezahlt, aber ohne Kostendaten - darf den CPL nicht verwaessern */}
       {otherPaidLabels.length > 0 && kpis.otherPaid > 0 && (
         <section className="kpi-section">
-          <div className="kpi-section-head"><span className="kpi-dot" style={{ background: AMBER }} />Bezahlt · {otherPaidLabels.join(' / ')}</div>
+          <div className="kpi-section-head"><span className="kpi-dot" style={{ background: OTHER_PAID }} />Bezahlt · {otherPaidLabels.join(' / ')}</div>
           <div className="kpi-grid">
-            <Card label={`Leads über ${otherPaidLabels.join(' / ')}`} value={fmtInt(kpis.otherPaid)} sub="Kosten nicht angebunden" accent={AMBER} />
-            <Card label="Anteil an allen Leads" value={fmtPct(kpis.total ? kpis.otherPaid / kpis.total : null)} sub="nicht im CPL enthalten" accent={AMBER} />
+            <Card label={`Leads über ${otherPaidLabels.join(' / ')}`} value={fmtInt(kpis.otherPaid)} sub="Kosten nicht angebunden" accent={OTHER_PAID} />
+            <Card label="Anteil an allen Leads" value={fmtPct(kpis.total ? kpis.otherPaid / kpis.total : null)} sub="nicht im CPL enthalten" accent={OTHER_PAID} />
           </div>
         </section>
       )}

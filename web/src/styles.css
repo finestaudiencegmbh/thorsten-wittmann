@@ -850,8 +850,9 @@ body {
 }
 .funnel-tab {
   display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   padding: 9px 16px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -868,6 +869,30 @@ body {
   border-color: var(--line-strong);
   color: var(--accent-ink);
 }
+.funnel-tab-head { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Aufteilung nach Quelle direkt im Reiter - beantwortet "wie viele Leads kamen
+   bezahlt, wie viele organisch" ohne Scrollen. */
+.funnel-split {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.fs { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.fs::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.fs-paid { color: var(--accent); }
+.fs-other { color: #a78bfa; }
+.fs-organic { color: #5ec8d8; }
+
 .funnel-count {
   padding: 2px 8px;
   border-radius: 999px;
