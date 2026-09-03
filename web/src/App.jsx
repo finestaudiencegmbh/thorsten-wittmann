@@ -101,6 +101,21 @@ export default function App() {
   const cplDaily = useMemo(() => ((hasFb && fb.daily) ? cplByDay(fb.daily.spend, filtered) : []), [hasFb, fb, filtered]);
   const qualityDaily = useMemo(() => (data ? qualityByDay(filtered) : []), [data, filtered]);
 
+  // Aufteilung nach Quelle je Tag - erscheint in der Hover-Box des Verlaufs.
+  const splitByDay = useMemo(() => {
+    const m = new Map();
+    for (const d of leadDaily) m.set(d.date, d);
+    return (date) => {
+      const d = m.get(date);
+      if (!d) return [];
+      return [
+        { key: 'paid', label: SPEND_SOURCE_LABEL, value: fmtInt(d.paid || 0), color: 'var(--accent)' },
+        ...(OTHER_PAID_LABEL ? [{ key: 'other', label: OTHER_PAID_LABEL, value: fmtInt(d.otherPaid || 0), color: '#a78bfa' }] : []),
+        { key: 'organic', label: 'Organisch', value: fmtInt(d.organic || 0), color: '#5ec8d8' },
+      ];
+    };
+  }, [leadDaily]);
+
   // Drill-Pfad NUR für "Performance nach Ebene" – getrennt von den globalen
   // Filtern. Klick = reinzoomen, ohne dauerhaften globalen Filter zu setzen.
   const [drill, setDrill] = useState({ campaign: '', adset: '', creative: '' });
@@ -210,9 +225,6 @@ export default function App() {
           <div className="funnel-tabs" role="tablist" aria-label="Funnel">
             {FUNNEL_TABS.map((f) => {
               const set = f.id ? filteredNoFunnel.filter((l) => l.funnel === f.id) : filteredNoFunnel;
-              const nPaid = set.filter((l) => l.sourceType === 'paid').length;
-              const nOther = set.filter((l) => l.sourceType === 'other-paid').length;
-              const nOrganic = set.filter((l) => l.sourceType === 'organic').length;
               return (
                 <button
                   key={f.id || 'all'}
@@ -221,23 +233,8 @@ export default function App() {
                   className={`funnel-tab ${funnel === f.id ? 'active' : ''}`}
                   onClick={() => setFunnel(f.id)}
                 >
-                  <span className="funnel-tab-head">
-                    {f.label}
-                    <span className="funnel-count">{fmtInt(set.length)}</span>
-                  </span>
-                  <span className="funnel-split">
-                    <span className="fs fs-paid" title={`${fmtInt(nPaid)} Leads aus ${SPEND_SOURCE_LABEL}-Kampagnen (mit Kostendaten)`}>
-                      {fmtInt(nPaid)} {SPEND_SOURCE_LABEL}
-                    </span>
-                    {OTHER_PAID_LABEL && (
-                      <span className="fs fs-other" title={`${fmtInt(nOther)} Leads aus ${OTHER_PAID_LABEL} – bezahlt, aber ohne Kostendaten`}>
-                        {fmtInt(nOther)} {OTHER_PAID_LABEL}
-                      </span>
-                    )}
-                    <span className="fs fs-organic" title={`${fmtInt(nOrganic)} organische Leads (Reoptin, Newsletter, Direkt …)`}>
-                      {fmtInt(nOrganic)} organisch
-                    </span>
-                  </span>
+                  {f.label}
+                  <span className="funnel-count">{fmtInt(set.length)}</span>
                 </button>
               );
             })}
@@ -287,6 +284,7 @@ export default function App() {
                     ) : (
                       <>
                         <TimeChart title={hasTickets ? 'Leads & Tickets pro Tag' : 'Leads pro Tag'} formatY={(v) => fmtInt(Math.round(v))}
+                          tooltipExtra={splitByDay}
                           series={[
                             { key: 'leads', label: 'Leads', color: '#5ec8d8', data: leadDaily.map((d) => ({ date: d.date, value: d.leads })) },
                             ...(hasTickets ? [{ key: 'tickets', label: 'Tickets', color: '#6fcf97', data: leadDaily.map((d) => ({ date: d.date, value: d.tickets })) }] : []),

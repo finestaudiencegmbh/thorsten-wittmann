@@ -285,9 +285,13 @@ export function leadsByDay(leads) {
   for (const l of leads) {
     const day = dayKey(l.wonAt);
     if (!day) continue;
-    if (!m.has(day)) m.set(day, { date: day, leads: 0, tickets: 0 });
+    if (!m.has(day)) m.set(day, { date: day, leads: 0, tickets: 0, paid: 0, otherPaid: 0, organic: 0 });
     const e = m.get(day);
     e.leads += 1;
+    // Aufteilung nach Quelle - wird im Tooltip des Verlaufs-Charts gezeigt.
+    if (l.sourceType === 'paid') e.paid += 1;
+    else if (l.sourceType === 'other-paid') e.otherPaid += 1;
+    else e.organic += 1;
     if (l.hasTicket) e.tickets += 1;
   }
   return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1));

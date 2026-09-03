@@ -4,8 +4,13 @@ import React, { useState, useMemo } from 'react';
  * Leichtgewichtiger SVG-Zeitreihen-Graph (keine Library).
  * series: [{ key, label, color, data: [{date, value}] }]
  * Tooltip beim Überfahren zeigt alle Serien für den jeweiligen Tag.
+ *
+ * tooltipExtra: optional (dateIso) => [{ key, label, value, color }]
+ * Zusatzzeilen NUR für den Tooltip – sie werden nicht als Linie gezeichnet.
+ * Damit passt z. B. die Aufteilung nach Quelle in die Hover-Box, ohne den
+ * Graphen mit weiteren Kurven zu überladen.
  */
-export default function TimeChart({ title, series, formatY = (v) => v, formatX = fmtDay, height = 220 }) {
+export default function TimeChart({ title, series, formatY = (v) => v, formatX = fmtDay, height = 220, tooltipExtra = null }) {
   const [hover, setHover] = useState(null);
 
   const { dates, points, maxY, pad, w, h, plotW, plotH } = useMemo(() => {
@@ -112,6 +117,19 @@ export default function TimeChart({ title, series, formatY = (v) => v, formatX =
             {series.map((s, si) => (
               <div key={s.key} className="tt-row"><span className="legend-dot" style={{ background: s.color }} />{s.label}: <strong>{formatY(points[si][hover].v)}</strong></div>
             ))}
+            {(() => {
+              const rows = tooltipExtra ? (tooltipExtra(dates[hover]) || []) : [];
+              if (!rows.length) return null;
+              return (
+                <div className="tt-extra">
+                  {rows.map((r) => (
+                    <div key={r.key} className="tt-row tt-row-sub">
+                      <span className="legend-dot" style={{ background: r.color }} />{r.label}: <strong>{r.value}</strong>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
           );
         })()}
