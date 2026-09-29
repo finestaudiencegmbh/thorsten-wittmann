@@ -110,7 +110,7 @@ function isPaid(utm, paidAdsets, patterns) {
  * Führt Leads, VIP-Tickets und Adspend-Übersicht zu einem einheitlichen
  * Datensatz zusammen. Join über die E-Mail-Adresse.
  */
-export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEFAULT_CONFIG) {
+export function buildDataset({ leads, tickets, surveys = [], overview }, cfg, projectCfg = DEFAULT_CONFIG) {
   const warnings = [];
   const features = projectCfg.features || DEFAULT_CONFIG.features;
   const hasTickets = Boolean(features.hasTickets);
@@ -154,6 +154,14 @@ export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEF
     return { ...base, paid: true, campaign: rawCampaign2, adset: rawAdset2, creative: rawCreative2 || unattribLabel };
   };
 
+  // Umfrage-Antworten nach E-Mail indizieren. Reichert die Lead-Zeilen an,
+  // veraendert die Lead-Anzahl aber NICHT - eine Umfrage ist kein zusaetzlicher
+  // Lead, sondern eine Zusatzinformation zu einem bestehenden.
+  const surveyByEmail = new Map();
+  for (const sv of surveys) {
+    if (sv.email && !surveyByEmail.has(sv.email)) surveyByEmail.set(sv.email, sv);
+  }
+
   // Antworten/Qualität aus dem VIP-Tab nach E-Mail indizieren (zum Anreichern
   // der Lead-Zeilen; verändert NICHT die Lead-Anzahl).
   const ticketByEmail = new Map();
@@ -189,8 +197,11 @@ export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEF
         isTicketRow = true;
       }
     }
+    const sv = email ? surveyByEmail.get(email) : null;
     recs.push({
       funnel: l.funnel ?? null,
+      surveyAnswers: sv ? sv.answers : null,
+      surveyAt: sv ? sv.at : null,
       email,
       firstName: l.firstName || t?.firstName || '',
       lastName: l.lastName || t?.lastName || '',
@@ -240,7 +251,9 @@ export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEF
     const ld = dimsFor(r.utm);
     const paid = ld.paid;
     const { campaign, adset, creative } = ld;
-    const quality = hasQuality && r.hasTicket ? computeQuality(r.answers, cfg) : null;
+    const quality = hasQuality
+      ? computeQuality(r.surveyAnswers || (r.hasTicket ? r.answers : null), cfg)
+      : null;
 
     // Ticket-Dimensionen aus der TICKET-EIGENEN UTM (damit ein Ticket dort zählt,
     // wo es wirklich entstand – nicht in jeder Kampagne, in der die Person Lead war)
@@ -285,7 +298,12 @@ export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEF
           organicAdset: paid && label ? (collapse(r.utm.campaign) || label) : o.adset,
         };
       })()),
-      ...(hasQuality ? { quality, answers: r.answers } : {}),
+      ...(hasQuality ? {
+        quality,
+        answers: r.surveyAnswers || r.answers,
+        hasSurvey: Boolean(r.surveyAnswers),
+        surveyAt: r.surveyAt ?? null,
+      } : {}),
     });
   }
 
@@ -304,8 +322,37 @@ export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEF
     }
   }
 
+  // Umfrage-Antworten als EIGENE Datensaetze, attribuiert ueber ihre eigenen
+  // UTM-Werte. Damit funktioniert die Qualitaets-Auswertung auch dann, wenn
+  // die Person (noch) in keinem Lead-Tab steht - und die Zuordnung haengt
+  // nicht am E-Mail-Match.
+  const leadEmails = new Set(records.map((r) => r.email).filter(Boolean));
+  const surveyRecords = hasQuality ? surveys.map((sv) => {
+    const d = dimsFor(sv.utm);
+    return {
+      at: sv.at,
+      funnel: sv.funnel ?? null,
+      email: sv.email,
+      name: collapse(`${sv.firstName} ${sv.lastName}`) || '(ohne Name)',
+      firstName: sv.firstName,
+      lastName: sv.lastName,
+      phone: sv.phone,
+      answers: sv.answers,
+      quality: computeQuality(sv.answers, cfg),
+      sourceType: d.paid ? (d.hasSpend ? 'paid' : 'other-paid') : 'organic',
+      sourceBucket: d.bucket,
+      campaign: d.campaign,
+      adset: d.adset,
+      creative: d.creative,
+      // Steht die Person auch im Lead-Tab? Nur ein Hinweis, die Auswertung
+      // haengt nicht davon ab.
+      matchedLead: Boolean(sv.email && leadEmails.has(sv.email)),
+    };
+  }) : [];
+
   return {
     leads: records,
+    ...(hasQuality ? { surveys: surveyRecords } : {}),
     overview,
     overviewByAdset: Object.fromEntries(overviewByAdset),
     warnings,
@@ -315,7 +362,16 @@ export function buildDataset({ leads, tickets, overview }, cfg, projectCfg = DEF
       otherPaidLeads: records.filter((r) => r.sourceType === 'other-paid').length,
       organicLeads: records.filter((r) => r.sourceType === 'organic').length,
       ...(hasTickets ? { tickets: records.filter((r) => r.hasTicket).length } : {}),
-      ...(hasQuality ? { scored: records.filter((r) => r.quality).length } : {}),
+      ...(hasQuality ? {
+        scored: records.filter((r) => r.quality).length,
+        surveys: surveyRecords.length,
+        surveysMatched: surveyRecords.filter((r) => r.matchedLead).length,
+        byTier: surveyRecords.reduce((acc, r) => {
+          const k = r.quality?.tier || '–';
+          acc[k] = (acc[k] || 0) + 1;
+          return acc;
+        }, {}),
+      } : {}),
       byFunnel: Object.fromEntries(
         funnels.map((f) => [f.id, records.filter((r) => r.funnel === f.id).length]),
       ),

@@ -424,3 +424,84 @@ export function groupCount(leads, getKey, { limit = 0, emptyLabel = '(direkt)' }
   if (limit > 0) arr = arr.slice(0, limit);
   return arr;
 }
+
+
+// ---- Lead-Qualität (Umfrage) ----------------------------------------------
+// Arbeitet auf den Umfrage-Datensätzen, nicht auf den Leads: eine Umfrage
+// trägt ihre eigenen UTM-Werte und ist damit auch dann auswertbar, wenn die
+// Person (noch) in keinem Lead-Tab steht.
+
+/** Tier-Verteilung über Umfrage-Antworten. */
+export function surveyTiers(surveys, tiers) {
+  const dist = {};
+  for (const t of tiers) dist[t.key] = 0;
+  dist.none = 0;
+  for (const s of surveys) {
+    const k = s.quality?.tier || 'none';
+    dist[k] = (dist[k] || 0) + 1;
+  }
+  return dist;
+}
+
+/** Anteil A/B-Leads pro Tag (für den Verlauf im Qualitäts-Reiter). */
+export function surveyQualityByDay(surveys) {
+  const m = new Map();
+  for (const s of surveys) {
+    const day = dayKey(s.at);
+    if (!day) continue;
+    if (!m.has(day)) m.set(day, { date: day, total: 0, ab: 0 });
+    const e = m.get(day);
+    e.total += 1;
+    if (['A', 'B'].includes(s.quality?.tier)) e.ab += 1;
+  }
+  return [...m.values()]
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+    .map((e) => ({ date: e.date, value: e.total ? e.ab / e.total : null, total: e.total, ab: e.ab }));
+}
+
+/**
+ * Umfragen je Dimension verdichten (Kampagne / Anzeigengruppe / Creative).
+ * Liefert Anzahl, Tier-Zählung, A-Quote, A+B-Quote und Ø-Score.
+ */
+export function aggregateSurveys(surveys, dimKey, tiers) {
+  const m = new Map();
+  for (const s of surveys) {
+    const k = s[dimKey] || '(unbekannt)';
+    if (!m.has(k)) m.set(k, { key: k, total: 0, scoreSum: 0, scored: 0, tiers: {} });
+    const e = m.get(k);
+    e.total += 1;
+    const t = s.quality?.tier;
+    if (t) {
+      e.tiers[t] = (e.tiers[t] || 0) + 1;
+      e.scoreSum += s.quality.score;
+      e.scored += 1;
+    }
+  }
+  return [...m.values()]
+    .map((e) => {
+      const a = e.tiers.A || 0;
+      const b = e.tiers.B || 0;
+      return {
+        ...e,
+        aRate: e.total ? a / e.total : null,
+        abRate: e.total ? (a + b) / e.total : null,
+        avgScore: e.scored ? Math.round(e.scoreSum / e.scored) : null,
+        counts: tiers.map((t) => ({ key: t.key, color: t.color, n: e.tiers[t.key] || 0 })),
+      };
+    })
+    .sort((x, y) => y.total - x.total);
+}
+
+/** Verteilung der Antworten auf eine einzelne Frage. */
+export function answerDistribution(surveys, field) {
+  const m = new Map();
+  for (const s of surveys) {
+    const v = s.answers?.[field];
+    if (!v) continue;
+    m.set(v, (m.get(v) || 0) + 1);
+  }
+  const total = [...m.values()].reduce((a, b) => a + b, 0);
+  return [...m.entries()]
+    .map(([key, n]) => ({ key, n, share: total ? n / total : 0 }))
+    .sort((a, b) => b.n - a.n);
+}

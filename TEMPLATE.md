@@ -153,6 +153,21 @@ Die Schlüssel in `questionnaireColumns` müssen zu den Feldnamen in
 `config/scoring.json` passen. Ohne passenden Eintrag in `questionnaireLabels`
 zeigt die Oberfläche den rohen Feldnamen.
 
+**Der Umfrage-Tab muss vor den Lead-Tabs erkannt werden.** Er trägt dieselben
+Basis-Spalten (Datum, E-Mail, UTMs); würde er als Lead-Tabelle durchgehen,
+zählte jede Antwort zusätzlich als Lead. Der Parser prüft deshalb zuerst auf
+mindestens zwei Fragebogen-Spalten. Heißt: `questionnaireColumns` muss
+stimmen, sonst verschiebt sich die Lead-Anzahl.
+
+**Bewertungsmodell** (`config/scoring.json`, `model: "criteria"`): Der Tier
+ergibt sich aus Regeln, nicht aus einer Punktsumme — A = beide Geld-Kriterien
+auf High, B = eines (oder beide ohne Angabe), C = darunter, D = investiert
+gar nicht. Die Antwort-Optionen stehen als geordnete Liste in `criteria`,
+`highFrom` ist die erste Stufe, die als High zählt. Verglichen wird
+normalisiert (Tausenderpunkte, €, Leerzeichen raus) und **exakt** gegen die
+Optionen — Teilstring-Vergleiche wären hier falsch, weil z. B.
+„30.000€ - 100.000€" die Zeichenfolge „100.000" enthält.
+
 ---
 
 ## 3. Funnels (optional)

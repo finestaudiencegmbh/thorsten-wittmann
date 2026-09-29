@@ -1,3 +1,19 @@
+/**
+ * Lead-Qualität aus den Umfrage-Antworten.
+ *
+ * Regelbasiert statt gewichtet: der Tier ergibt sich aus den beiden
+ * Geld-Kriterien (Investitionssumme und Nettovermögen), nicht aus einer
+ * Punktsumme. Das ist nachvollziehbar ("warum ist der ein B?") und lässt sich
+ * ohne Code-Änderung in config/scoring.json verschieben.
+ *
+ *   A  beide Kriterien auf High
+ *   B  genau eines auf High – oder beide ohne Angabe
+ *   C  keines auf High, investiert aber grundsätzlich
+ *   D  investiert noch gar nicht
+ *
+ * Ein Beruf aus occupation.downgrade zieht zusätzlich eine Stufe ab.
+ * Das Alter fließt bewusst nicht ein.
+ */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,141 +26,114 @@ export function loadScoringConfig() {
   return JSON.parse(raw);
 }
 
-/** Parst die Zahlen aus einer Einkommens-/Geldangabe und liefert einen Mittelwert in € (oder null). */
-export function parseAmount(text) {
-  if (!text) return null;
-  const t = String(text).toLowerCase().replace(/\s/g, '');
-  // "über 10.000", "mehr als 10000" -> Obergrenze offen
-  const openTop = /(über|mehralsals|mehrals|>)/.test(t);
-  // alle Zahlen einsammeln (Tausenderpunkt entfernen, Dezimalkomma ignorieren)
-  const nums = (t.match(/\d[\d.]*/g) || [])
-    .map((n) => parseInt(n.replace(/\./g, ''), 10))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  if (nums.length === 0) return null;
-  if (nums.length === 1) return openTop ? nums[0] * 1.25 : nums[0];
-  // Spanne -> Mittelwert der beiden größten plausiblen Werte
-  const min = Math.min(...nums);
-  const max = Math.max(...nums);
-  return Math.round((min + max) / 2);
-}
-
-/** Mittelwert des Einkommens in €/Monat (für Stufen + Haushaltsregel). */
-export function incomeMid(text) {
-  if (!text) return null;
-  const t = String(text).toLowerCase();
-  // "weniger als 1.000" -> als ~750 werten (untere Stufe)
-  if (/weniger als|unter|bis zu/.test(t)) {
-    const n = parseAmount(text);
-    return n != null ? n * 0.75 : null;
-  }
-  // "mehr als 5.000 / über 5000" -> klar über der Top-Schwelle
-  if (/mehr als|über|ab /.test(t)) {
-    const n = parseAmount(text);
-    return n != null ? n * 1.25 : null;
-  }
-  return parseAmount(text);
-}
-
-function scoreIncome(text, cfg) {
-  const mid = incomeMid(text);
-  if (mid == null) return null;
-  // Stufenmodell (neue Config) bevorzugt, sonst Fallback auf fullScoreAt
-  if (Array.isArray(cfg.income.tiers)) {
-    const tier = cfg.income.tiers.find((t) => mid >= t.atLeast);
-    return tier ? tier.score : 0.05;
-  }
-  return clamp01(mid / (cfg.income.fullScoreAt || 5000));
-}
-
-function scoreInvested(text, cfg) {
-  if (!text) return null;
-  const t = String(text).toLowerCase();
-  if (/(^|\b)(nein|keine?|noch nicht|gar nicht|0\b)/.test(t.trim())) return cfg.invested.none;
-  const amount = parseAmount(text);
-  if (/monat/.test(t)) {
-    // monatlicher Sparbetrag: Basiswert, durch Höhe leicht angehoben
-    const bump = amount ? clamp01(amount / 1000) * 0.3 : 0;
-    return clamp01(cfg.invested.monthly + bump);
-  }
-  if (amount != null) return clamp01(amount / cfg.invested.fullScoreAt);
-  if (/(ja|bereits|schon)/.test(t)) return cfg.invested.yesGeneric;
-  return cfg.invested.yesGeneric;
-}
-
-function scoreRealEstate(text, cfg) {
-  if (!text) return null;
-  const t = String(text).toLowerCase();
-  for (const rule of cfg.realEstate.rules) {
-    if (t.includes(rule.match)) return rule.score;
-  }
-  return null;
-}
-
-function scoreEmployment(text, cfg) {
-  if (!text) return null;
-  const t = String(text).toLowerCase().trim();
-  for (const [key, val] of Object.entries(cfg.employment.scores)) {
-    if (t.includes(key)) return val;
-  }
-  return cfg.employment.default;
-}
-
-function clamp01(n) {
-  return Math.max(0, Math.min(1, n));
-}
-
-function tierFor(score, cfg) {
-  if (score == null) return null;
-  const tiers = [...cfg.tiers].sort((a, b) => b.min - a.min);
-  for (const t of tiers) {
-    if (score >= t.min) return t;
-  }
-  return tiers[tiers.length - 1];
-}
+/**
+ * Vergleichsschlüssel für Antwort-Optionen.
+ *
+ * Das Sheet schreibt Beträge uneinheitlich ("5.000 - 10.000 €" neben
+ * "5.000€ - 30.000€"). Tausenderpunkte, Währungszeichen und Leerzeichen
+ * fliegen deshalb raus – "Über 10.000€" und "Über 10.000 €" werden gleich.
+ * Teilstring-Vergleiche wären hier falsch: "30.000€ - 100.000€" enthält
+ * "100.000" und würde sonst als High durchgehen.
+ */
+export const optionKey = (s) =>
+  String(s ?? '')
+    .toLowerCase()
+    .replace(/&amp;/g, '&')
+    .replace(/[€\s ]/g, '')
+    .replace(/\.(?=\d{3}\b)/g, '')
+    .replace(/[–—]/g, '-')
+    .trim();
 
 /**
- * Berechnet die Lead-Qualität (0..100) aus den VIP-Ticket-Antworten.
- * Fehlende Dimensionen werden ausgeklammert, das Ergebnis auf die
- * vorhandenen Gewichte renormiert – fehlende Antworten ziehen den Score
- * also nicht unfair nach unten.
+ * Stuft eine Antwort ein: 'high' | 'low' | 'unknown' | null (keine Antwort).
+ * Die Rangfolge kommt aus der Reihenfolge in options; highFrom ist die erste
+ * Stufe, die als High zählt.
+ */
+export function classifyAnswer(value, criterion) {
+  const v = optionKey(value);
+  if (!v) return null;
+  const unknown = (criterion.unknown || []).map(optionKey);
+  if (unknown.includes(v)) return 'unknown';
+  const options = (criterion.options || []).map(optionKey);
+  const idx = options.indexOf(v);
+  if (idx === -1) return null; // unbekannte Antwort -> nicht bewerten
+  const highIdx = options.indexOf(optionKey(criterion.highFrom));
+  if (highIdx === -1) return 'low';
+  return idx >= highIdx ? 'high' : 'low';
+}
+
+const TIER_ORDER = ['A', 'B', 'C', 'D'];
+
+/** Eine Stufe abwerten (A -> B -> C -> D, D bleibt D). */
+function downgrade(tierKey) {
+  const i = TIER_ORDER.indexOf(tierKey);
+  if (i === -1) return tierKey;
+  return TIER_ORDER[Math.min(i + 1, TIER_ORDER.length - 1)];
+}
+
+const matchesAny = (value, list) => {
+  const v = optionKey(value);
+  if (!v) return false;
+  return (list || []).map(optionKey).some((x) => x && v.includes(x));
+};
+
+/**
+ * @param {object} answers  { invest, wealth, occupation, investments, age, ... }
+ * @param {object} cfg      config/scoring.json
  */
 export function computeQuality(answers, cfg) {
   if (!answers) return null;
-  const subs = {
-    income: scoreIncome(answers.income, cfg),
-    invested: scoreInvested(answers.invested, cfg),
-    realEstate: scoreRealEstate(answers.realEstate, cfg),
-    employment: scoreEmployment(answers.employment, cfg),
+  const criteria = cfg.criteria || {};
+  const pts = cfg.points || {};
+
+  const invest = classifyAnswer(answers.invest, criteria.invest || {});
+  const wealth = classifyAnswer(answers.wealth, criteria.wealth || {});
+
+  // Ohne beide Geldangaben gibt es nichts zu bewerten.
+  if (invest == null && wealth == null) return null;
+
+  const states = [invest, wealth];
+  const highs = states.filter((s) => s === 'high').length;
+  const unknowns = states.filter((s) => s === 'unknown').length;
+  const investsNothing = matchesAny(answers.investments, (cfg.investments || {}).noneValues);
+
+  let tierKey;
+  if (highs === 2) tierKey = 'A';
+  else if (highs === 1) tierKey = 'B';
+  else if (unknowns === states.filter((s) => s != null).length) tierKey = 'B'; // alles ohne Angabe
+  else if (investsNothing && unknowns === 0) tierKey = 'D';
+  // "Möchte ich nicht angeben" wirkt neutral: es blockiert A, darf aber nicht
+  // nach unten durchschlagen. Wer eine Geldangabe offenlässt, faellt deshalb
+  // nicht nach D - dahinter kann sich genauso gut ein A verbergen.
+  else tierKey = 'C';
+
+  // Beruf wertet ab (Alter bewusst nicht).
+  const downgraded = matchesAny(answers.occupation, (cfg.occupation || {}).downgrade);
+  if (downgraded) tierKey = downgrade(tierKey);
+
+  // Score nur als Sortier-/Mittelwert-Hilfe – der Tier steht bereits fest.
+  const pointFor = (state) => {
+    if (state === 'high') return pts.high ?? 50;
+    if (state === 'unknown') return pts.unknown ?? 25;
+    if (state === 'low') return investsNothing ? (pts.none ?? 5) : (pts.low ?? 10);
+    return 0;
   };
+  let score = pointFor(invest) + pointFor(wealth);
+  if (downgraded) score -= pts.downgradePenalty ?? 15;
+  score = Math.max(0, Math.min(100, Math.round(score)));
 
-  let sumW = 0;
-  let sum = 0;
-  const breakdown = {};
-  for (const dim of Object.keys(cfg.weights)) {
-    const s = subs[dim];
-    const w = cfg.weights[dim];
-    breakdown[dim] = s == null ? null : Math.round(s * 100);
-    if (s != null) {
-      sum += s * w;
-      sumW += w;
-    }
-  }
-  if (sumW === 0) return null;
-  let score = Math.round((sum / sumW) * 100);
-  let capped = false;
-
-  // Harte Haushaltsregel: niedriges Einkommen + Partner-Haushalt => Bad Quality.
-  const hr = cfg.householdRule;
-  if (hr?.enabled) {
-    const mid = incomeMid(answers.income);
-    const rel = String(answers.relationship || '').toLowerCase();
-    const hasPartner = (hr.relationships || []).some((r) => rel.includes(String(r).toLowerCase()));
-    if (mid != null && mid < hr.incomeBelow && hasPartner) {
-      score = Math.min(score, hr.cappedScore ?? 20);
-      capped = true;
-    }
-  }
-
-  const tier = tierFor(score, cfg);
-  return { score, tier: tier?.key ?? null, tierLabel: tier?.label ?? null, breakdown, capped };
+  const tier = (cfg.tiers || []).find((t) => t.key === tierKey) || null;
+  return {
+    score,
+    tier: tierKey,
+    tierLabel: tier?.label ?? tierKey,
+    breakdown: {
+      invest: invest,
+      wealth: wealth,
+      occupation: downgraded ? 'abgewertet' : 'ok',
+    },
+    capped: downgraded,
+  };
 }
+
+export const _internal = { downgrade, matchesAny, TIER_ORDER };

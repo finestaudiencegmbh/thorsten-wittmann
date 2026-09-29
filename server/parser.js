@@ -87,6 +87,15 @@ function classifyHeader(cells, cfg = DEFAULT_CONFIG) {
   const ov = sheet.overviewColumns || {};
   if (hasField(ov.adset) && hasField(ov.adspend)) return 'overview';
 
+  // WICHTIG: vor den Leads pruefen. Der Umfrage-Tab traegt dieselben
+  // Basis-Spalten (Datum, E-Mail, UTMs) wie ein Lead-Tab - wuerde er als
+  // Lead-Tabelle durchgehen, zaehlte jede Antwort zusaetzlich als Lead.
+  if (features.hasQuality) {
+    const qc = sheet.questionnaireColumns || {};
+    const answerCols = Object.values(qc).filter((aliases) => hasField(aliases)).length;
+    if (answerCols >= 2) return 'survey';
+  }
+
   if (features.hasTickets) {
     const tc = sheet.ticketColumns || {};
     const qc = sheet.questionnaireColumns || {};
@@ -268,16 +277,55 @@ function parseTicketRow(o, cfg) {
 }
 
 /**
+ * Eine Zeile aus dem Umfrage-Tab. Traegt eigene UTM-Werte, die Qualitaet
+ * laesst sich dadurch direkt an Kampagne/Anzeigengruppe/Creative haengen -
+ * unabhaengig davon, ob die Person im Lead-Tab wiedergefunden wird.
+ */
+function parseSurveyRow(o, cfg) {
+  const sheet = cfg.sheet || DEFAULT_CONFIG.sheet;
+  const cols = sheet.surveyColumns || {};
+  const lead = sheet.leadColumns || {};
+  const utmVal = sheet.decodePlusAsSpace ? decodePlus : norm;
+  const at = parseDate(pick(o, cols.at));
+  const email = normEmail(pick(o, cols.email));
+  if (!at && !email) return null;
+
+  const answers = {};
+  for (const [field, aliases] of Object.entries(sheet.questionnaireColumns || {})) {
+    answers[field] = norm(pick(o, aliases));
+  }
+
+  return {
+    at,
+    firstName: norm(pick(o, cols.firstName)),
+    lastName: norm(pick(o, cols.lastName)),
+    email,
+    phone: norm(pick(o, cols.phone)),
+    answers,
+    utm: {
+      source: utmVal(pick(o, lead.utmSource)),
+      medium: utmVal(pick(o, lead.utmMedium)),
+      campaign: utmVal(pick(o, lead.utmCampaign)),
+      term: utmVal(pick(o, lead.utmTerm)),
+      content: utmVal(pick(o, lead.utmContent)),
+    },
+  };
+}
+
+/**
  * Hauptfunktion: bekommt die Tabs als [{title, values}] und liefert
- * { leads, tickets, overview, warnings }.
+ * { leads, tickets, surveys, overview, warnings }.
  */
 export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
   const leads = [];
   const tickets = [];
+  const surveys = [];
   const overview = [];
   const warnings = [];
   const seenTickets = new Set();
+  const seenSurveys = new Set();
   const hasTickets = Boolean(cfg.features?.hasTickets);
+  const hasQuality = Boolean(cfg.features?.hasQuality);
   const overviewCols = (cfg.sheet || DEFAULT_CONFIG.sheet).overviewColumns || {};
 
   for (const sheet of sheets) {
@@ -290,6 +338,16 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
         if (table.type === 'overview') {
           const r = parseOverviewRow(o, overviewCols);
           if (r) overview.push({ ...r, funnel });
+        } else if (table.type === 'survey') {
+          if (!hasQuality) continue;
+          const r = parseSurveyRow(o, cfg);
+          if (!r) continue;
+          // Dedupe ueber E-Mail + Zeitpunkt (Formulare liefern gelegentlich
+          // doppelte Zeilen).
+          const dk = `${r.email}|${r.at || ''}`;
+          if (seenSurveys.has(dk)) continue;
+          seenSurveys.add(dk);
+          surveys.push({ ...r, funnel });
         } else if (table.type === 'leads') {
           const r = parseLeadRow(o, cfg);
           if (r) leads.push({ ...r, funnel });
@@ -307,7 +365,7 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
     }
   }
 
-  return { leads, tickets, overview, warnings };
+  return { leads, tickets, surveys, overview, warnings };
 }
 
-export const _internal = { classifyHeader, key, num, parseDate, iterateTables, decodePlus, decodeEntities, pick };
+export const _internal = { classifyHeader, key, num, parseDate, iterateTables, decodePlus, decodeEntities, pick, parseSurveyRow };

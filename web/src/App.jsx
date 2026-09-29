@@ -10,6 +10,7 @@ import IntradayChart from './components/IntradayChart.jsx';
 import CampaignCards from './components/CampaignCards.jsx';
 import DateRangePicker from './components/DateRangePicker.jsx';
 import SourcesView from './components/SourcesView.jsx';
+import QualityView from './components/QualityView.jsx';
 import ChatBot from './components/ChatBot.jsx';
 import { fmtEur, fmtInt } from './lib.js';
 import { PROJECT, BRANDING, FUNNELS, TRAFFIC_SOURCES, hasFunnels, hasTickets, hasQuality, applyBranding } from './config.js';
@@ -18,6 +19,7 @@ const NAV = [
   { key: 'dashboard', label: 'Dashboard', icon: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z' },
   { key: 'campaigns', label: 'Kampagnen', icon: 'M3 3v18h18M7 15l4-4 3 3 5-6' },
   { key: 'leads', label: 'Leadliste', icon: 'M3 5h18M3 12h18M3 19h18' },
+  ...(hasQuality ? [{ key: 'quality', label: 'Leadqualität', icon: 'M12 2l2.9 6.3 6.8.7-5.1 4.6 1.5 6.7L12 16.9 5.9 20.3l1.5-6.7L2.3 9l6.8-.7L12 2z' }] : []),
   { key: 'sources', label: 'Quellen', icon: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 0v10l7 3' },
 ];
 
@@ -100,6 +102,19 @@ export default function App() {
   const leadDaily = useMemo(() => (data ? leadsByTime(filtered, hourlyDay) : []), [data, filtered, hourlyDay]);
   const cplDaily = useMemo(() => ((hasFb && fb.daily) ? cplByDay(fb.daily.spend, filtered) : []), [hasFb, fb, filtered]);
   const qualityDaily = useMemo(() => (data ? qualityByDay(filtered) : []), [data, filtered]);
+
+  // Umfrage-Antworten: gleiche Zeitraum-/Funnel-Logik wie die Leads, damit der
+  // Qualitaets-Reiter zur uebrigen Ansicht passt.
+  const surveysFiltered = useMemo(() => {
+    const all = data?.surveys || [];
+    return all.filter((s) => {
+      if (funnel && s.funnel !== funnel) return false;
+      const day = (s.at || '').slice(0, 10);
+      if (filters.from && (!day || day < filters.from)) return false;
+      if (filters.to && (!day || day > filters.to)) return false;
+      return true;
+    });
+  }, [data, funnel, filters.from, filters.to]);
 
   // Aufteilung nach Quelle je Tag - erscheint in der Hover-Box des Verlaufs.
   const splitByDay = useMemo(() => {
@@ -264,7 +279,13 @@ export default function App() {
 
         {data && (
           <>
-            <Filters leads={data.leads} filters={filters} setFilters={setFilters} tiers={tiers} onReset={() => setFilters({ ...EMPTY_FILTERS, from: range.from, to: range.to })} />
+            {/* Die Lead-Filter greifen nicht auf die Umfrage-Datensaetze -
+                im Qualitaets-Reiter blenden wir sie deshalb aus, statt eine
+                Leiste zu zeigen, die dort nichts bewirkt. Zeitraum und Funnel
+                gelten weiterhin, die kommen von oben. */}
+            {view !== 'quality' && (
+              <Filters leads={data.leads} filters={filters} setFilters={setFilters} tiers={tiers} onReset={() => setFilters({ ...EMPTY_FILTERS, from: range.from, to: range.to })} />
+            )}
 
             {view === 'dashboard' && (
               <>
@@ -367,6 +388,10 @@ export default function App() {
                 <div className="panel-head"><div><h2>Alle Leads</h2><span className="panel-sub">Zeile anklicken für Details &amp; Fragebogen-Antworten</span></div></div>
                 <LeadsTable leads={filtered} tiers={tiers} />
               </section>
+            )}
+
+            {view === 'quality' && hasQuality && (
+              <QualityView surveys={surveysFiltered} tiers={tiers} leads={filtered} />
             )}
 
             {view === 'sources' && <SourcesView leads={filtered} />}

@@ -123,7 +123,15 @@ async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
     // Die Frontend-relevanten Teile von project.config.json reisen im Payload
     // mit, damit Build und Laufzeit nicht auseinanderlaufen koennen.
     config: publicConfig(PROJECT),
-    ...(FEATURES.hasQuality ? { scoring: { weights: cfg.weights, tiers: cfg.tiers } } : {}),
+    ...(FEATURES.hasQuality ? {
+      scoring: {
+        tiers: cfg.tiers,
+        // Beschriftungen der Kriterien fuer die Legende im Qualitaets-Reiter
+        criteria: Object.fromEntries(
+          Object.entries(cfg.criteria || {}).map(([k, v]) => [k, { label: v.label, highFrom: v.highFrom }]),
+        ),
+      },
+    } : {}),
     fb,
     ...dataset,
   };

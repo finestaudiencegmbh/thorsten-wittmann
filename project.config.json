@@ -8,7 +8,7 @@
   },
   "features": {
     "hasTickets": false,
-    "hasQuality": false
+    "hasQuality": true
   },
   "funnels": [
     {
@@ -32,7 +32,8 @@
     "leadColumns": {
       "wonAt": [
         "gewonnen am",
-        "datum"
+        "datum",
+        "datum eintragung"
       ],
       "firstName": [
         "vorname"
@@ -69,6 +70,56 @@
       "adset": "utmTerm",
       "creative": "utmContent",
       "placement": null
+    },
+    "surveyColumns": {
+      "at": [
+        "datum eintragung"
+      ],
+      "firstName": [
+        "vorname"
+      ],
+      "lastName": [
+        "nachname"
+      ],
+      "email": [
+        "e-mail",
+        "email"
+      ],
+      "phone": [
+        "handynummer"
+      ]
+    },
+    "questionnaireColumns": {
+      "age": [
+        "alter"
+      ],
+      "occupation": [
+        "beruf"
+      ],
+      "investments": [
+        "aktuelle investments"
+      ],
+      "invest": [
+        "höhe investments"
+      ],
+      "wealth": [
+        "nettovermögen"
+      ],
+      "question": [
+        "frage an thorsten"
+      ],
+      "challenge": [
+        "herausforderung"
+      ]
+    },
+    "questionnaireLabels": {
+      "age": "Alter",
+      "occupation": "Beruf",
+      "investments": "Aktuelle Investments",
+      "invest": "Investitionssumme / Monat",
+      "wealth": "Nettovermögen",
+      "question": "Frage an Thorsten",
+      "challenge": "Herausforderung"
     }
   },
   "trafficSources": [
@@ -103,5 +154,11 @@
         "paid"
       ]
     }
-  ]
+  ],
+  "quality": {
+    "_comment": "Nur Kampagnen, deren Name eines dieser Muster enthaelt, fuehren eine Umfrage. Andere Kampagnen zeigen bei Qualitaets-Kennzahlen bewusst nichts statt 0.",
+    "campaignMatch": [
+      "ccc202610"
+    ]
+  }
 }

@@ -60,7 +60,12 @@ assert.equal(rebecca.hasTicket, true);
 assert.equal(rebecca.sourceType, 'paid');
 assert.equal(rebecca.campaign, 'J&P | MMV 15.06.-18.06. | ABO | 260526');
 assert.equal(rebecca.placement, 'Facebook Mobile Feed');
-assert.ok(rebecca.quality && rebecca.quality.score > 0, 'Qualität berechnet');
+// Diese Fixture nutzt den Fragebogen des Ursprungsprojekts (Einkommen,
+// Immobilien, ...). Das aktuelle Bewertungsmodell arbeitet mit anderen Fragen
+// (Investitionssumme/Nettovermögen) und bewertet hier daher bewusst NICHT -
+// statt einen Score aus unpassenden Antworten zu erfinden.
+// Das aktive Modell ist in server/scoring.test.mjs abgedeckt.
+assert.equal(rebecca.quality, null, 'fremder Fragebogen -> keine erfundene Bewertung');
 
 const max = ds.leads.find((l) => l.email === 'max@example.com');
 assert.equal(max.sourceType, 'organic', 'einzelnes Token = organisch');
@@ -82,4 +87,4 @@ const spendKey = 'j&p | lp 1 | broad | dach | w | 30-55';
 assert.equal(ds.overviewByAdset[spendKey].adspend, 1030.66);
 
 console.log('✓ Alle Parser-/Dataset-Tests bestanden');
-console.log('  Leads:', ds.counts, '| Quality Rebecca:', rebecca.quality.score, rebecca.quality.tier);
+console.log('  Leads:', ds.counts);

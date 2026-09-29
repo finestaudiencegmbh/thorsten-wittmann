@@ -131,9 +131,9 @@ oder Reihenfolge dürfen sich ändern:
 `utm_campaign` = Kampagne · `utm_source` = Anzeigengruppe ·
 `utm_medium` = Creative · `utm_term` = Placement.
 
-In diesem Projekt sind Tickets und Fragebogen-Scoring über
-`features.hasTickets` / `features.hasQuality` **abgeschaltet** — die
-zugehörigen KPIs, Spalten und Filter erscheinen nicht. Die Logik bleibt im Code
+In diesem Projekt sind Tickets über `features.hasTickets` **abgeschaltet**.
+Das Fragebogen-Scoring (`features.hasQuality`) ist **aktiv** und speist den
+Reiter „Leadqualität" aus dem Sheet-Tab `Umfrage CCC Webinar 10.10.26`. Die Logik bleibt im Code
 und lässt sich per Config wieder einschalten (siehe TEMPLATE.md).
 
 Historisch (bei aktiven Flags): Leads und Tickets werden über die **E-Mail** zusammengeführt (Funnelcockpit-
@@ -144,6 +144,22 @@ Placement-Ebene liefert ihn die Facebook-Anbindung (Phase 2).
 ---
 
 ## Lead-Qualität anpassen (nur bei `hasQuality: true`)
+
+Das Modell ist regelbasiert (`config/scoring.json`):
+
+| Tier | Regel |
+|---|---|
+| **A** | Investitionssumme **ab 2.000 €/Monat** UND Nettovermögen **ab 100.000 €** |
+| **B** | eines von beiden — oder beide Geldfragen ohne Angabe |
+| **C** | darunter, investiert aber grundsätzlich |
+| **D** | investiert noch gar nicht |
+
+Beruf „Schüler / Student / Azubi" zieht eine Stufe ab. **Alter fließt bewusst
+nicht ein** — bei Vermögensschutz sagt das Vermögen mehr aus als das
+Geburtsjahr; Rentner und Privatiers können A erreichen. „Möchte ich nicht
+angeben" wirkt neutral: blockiert A, verhindert kein B und zieht nie nach D.
+Der angezeigte Score (0–100) ist nur Sortier- und Mittelwert-Hilfe — maßgeblich
+ist der Tier.
 
 Das Bewertungsmodell steht in [`config/scoring.json`](config/scoring.json) –
 **kein Code nötig**. Du kannst Gewichte, Einkommens-Skalierung und die

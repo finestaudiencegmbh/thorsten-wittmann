@@ -44,10 +44,19 @@ function funnelFor(cfg, i) {
   return fs.length ? fs[i % fs.length].id : null;
 }
 
+// Antwort-Optionen der CCC-Webinar-Umfrage (fuer den Demo-Modus).
+const investOptions = ['Bis zu 500 €', '500 - 2.000 €', '2.000 - 5.000 €', '5.000 - 10.000 €', 'Über 10.000€', 'Möchte ich nicht angeben'];
+const wealthOptions = ['0 - 5.000€', '5.000€ - 30.000€', '30.000€ - 100.000€', '100.000€ - 500.000€', '500.000€ - 1.000.000€', 'Über 1.000.000€', 'Möchte ich nicht angeben'];
+const occupations = ['Unternehmer', 'Selbstständig', 'Angestellt', 'Schüler / Student / Azubi', 'Privatier', 'Rentner'];
+const ages = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+'];
+const investmentKinds = ['Aktien', 'ETFs', 'Krypto', 'Edelmetalle', 'Noch gar nicht'];
+
 export function getSampleParsed(cfg = {}) {
   const hasTickets = Boolean(cfg?.features?.hasTickets);
+  const hasQuality = Boolean(cfg?.features?.hasQuality);
   const leads = [];
   const tickets = [];
+  const surveys = [];
   let seed = 7;
   const next = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
 
@@ -97,6 +106,33 @@ export function getSampleParsed(cfg = {}) {
     }
   }
 
+  // Umfrage-Antworten fuer einen Teil der Leads (Demo)
+  if (hasQuality) {
+    for (let i = 0; i < 48; i += 2) {
+      const campaign = i % 5 < 3 ? campaigns[0] : campaigns[1];
+      const adset = i % 5 < 3 ? rand(adsets.slice(0, 3), i) : rand(adsets.slice(3), i);
+      const day = 24 + (i % 4);
+      surveys.push({
+        funnel: funnelFor(cfg, i),
+        at: new Date(Date.UTC(2026, 4, day, 12 + (i % 8), (i * 11) % 60, 0)).toISOString(),
+        firstName: `Demo${i}`,
+        lastName: 'Person',
+        email: `demo.lead${i}@example.com`,
+        phone: `+49150${String(2000000 + i)}`,
+        answers: {
+          age: rand(ages, Math.floor(next() * ages.length)),
+          occupation: rand(occupations, Math.floor(next() * occupations.length)),
+          investments: rand(investmentKinds, Math.floor(next() * investmentKinds.length)),
+          invest: rand(investOptions, Math.floor(next() * investOptions.length)),
+          wealth: rand(wealthOptions, Math.floor(next() * wealthOptions.length)),
+          question: 'Demo-Frage',
+          challenge: 'Demo-Herausforderung',
+        },
+        utm: { source: adset, medium: '', campaign, term: adset, content: rand(creatives, i) },
+      });
+    }
+  }
+
   // ein paar organische Leads
   for (let i = 0; i < 6; i++) {
     leads.push({
@@ -126,5 +162,5 @@ export function getSampleParsed(cfg = {}) {
     ticketsUnqualified: 2,
   }));
 
-  return { leads, tickets, overview };
+  return { leads, tickets, surveys, overview };
 }

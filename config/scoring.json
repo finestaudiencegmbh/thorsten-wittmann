@@ -1,78 +1,72 @@
 {
-  "_comment": "Bewertungsmodell für die Lead-Qualität. Alle Werte sind bewusst einfach gehalten und können angepasst werden. Geändert wird hier – nicht im Code. Nach dem Speichern im Dashboard auf 'Aktualisieren' klicken.",
+  "_comment": "Bewertungsmodell für die Lead-Qualität (Umfrage CCC Webinar). Regelbasiert, NICHT gewichtet: der Tier ergibt sich aus den beiden Geld-Kriterien, der Score ist nur eine Sortier-/Mittelwert-Hilfe. Geändert wird hier – nicht im Code. Nach dem Speichern im Dashboard auf 'Aktualisieren' klicken.",
 
-  "weights": {
-    "income": 0.8,
-    "invested": 0.08,
-    "realEstate": 0.07,
-    "employment": 0.05
-  },
+  "model": "criteria",
 
-  "householdRule": {
-    "_comment": "Harte Regel: niedriges Haushaltseinkommen. Wer unter 'incomeBelow' €/Monat verdient UND einen der 'relationships'-Werte angibt (Partner-Haushalt), wird automatisch als schlechte Qualität (Tier D) gewertet – unabhängig vom rechnerischen Score. cappedScore = angezeigter Score in diesem Fall.",
-    "enabled": true,
-    "incomeBelow": 3500,
-    "relationships": ["verheiratet", "in einer beziehung", "beziehung", "partnerschaft", "liiert"],
-    "cappedScore": 20
-  },
+  "_regeln": [
+    "A  = beide Geld-Kriterien auf High (Investitionssumme UND Nettovermögen)",
+    "B  = genau eines auf High – ODER beide ohne Angabe (könnte A sein, nur nicht gesagt)",
+    "C  = keines auf High, investiert aber grundsätzlich",
+    "D  = investiert noch gar nicht (nur wenn beide Geldfragen beantwortet sind)",
+    "Keine Angabe wirkt neutral: blockiert A, verhindert aber kein B und zieht nie nach D.",
+    "Beruf in 'downgrade' zieht zusätzlich eine Stufe ab (A->B, B->C, C->D).",
+    "Alter fließt bewusst NICHT ein – siehe README."
+  ],
 
-  "income": {
-    "_comment": "Monatliches Einkommen als Stufen (0..1), passend zur Ampel im Sheet. Es wird der Mittelwert der erkannten Spanne gebildet und der ersten passenden Stufe (atLeast = untere Grenze) zugeordnet.",
-    "tiers": [
-      { "atLeast": 5000, "score": 1.0 },
-      { "atLeast": 3500, "score": 0.8 },
-      { "atLeast": 2500, "score": 0.5 },
-      { "atLeast": 1500, "score": 0.25 },
-      { "atLeast": 1000, "score": 0.12 },
-      { "atLeast": 0, "score": 0.05 }
-    ]
-  },
-
-  "invested": {
-    "_comment": "Bereits in den Vermögensaufbau investiertes Kapital. Freitext wird nach Stichworten/Beträgen bewertet (0..1).",
-    "none": 0.05,
-    "monthly": 0.6,
-    "yesGeneric": 0.5,
-    "fullScoreAt": 10000
-  },
-
-  "realEstate": {
-    "_comment": "Immobilienbesitz. Schlüssel werden case-insensitiv als Teilstring geprüft (von oben nach unten).",
-    "rules": [
-      { "match": "mehrere", "score": 1.0 },
-      { "match": "zwei", "score": 1.0 },
-      { "match": "ja", "score": 0.7 },
-      { "match": "noch nicht", "score": 0.3 },
-      { "match": "nein", "score": 0.0 }
-    ]
-  },
-
-  "employment": {
-    "_comment": "Beschäftigungsstatus. Für ein Vermögensaufbau-Angebot zählt verfügbares/planbares Einkommen.",
-    "scores": {
-      "unternehmer": 1.0,
-      "selbststaendig": 0.9,
-      "selbstständig": 0.9,
-      "selbständig": 0.9,
-      "angestellt": 0.75,
-      "beamtin": 0.75,
-      "beamter": 0.75,
-      "in elternzeit": 0.5,
-      "elternzeit": 0.5,
-      "student": 0.4,
-      "studentin": 0.4,
-      "rentner": 0.4,
-      "rentnerin": 0.4,
-      "arbeitssuchend": 0.2,
-      "arbeitslos": 0.2
+  "criteria": {
+    "invest": {
+      "label": "Investitionssumme / Monat",
+      "_comment": "Reihenfolge = Rangfolge. 'highFrom' ist die erste Stufe, die als High zählt.",
+      "options": [
+        "Bis zu 500 €",
+        "500 - 2.000 €",
+        "2.000 - 5.000 €",
+        "5.000 - 10.000 €",
+        "Über 10.000€"
+      ],
+      "unknown": ["Möchte ich nicht angeben"],
+      "highFrom": "2.000 - 5.000 €"
     },
-    "default": 0.5
+    "wealth": {
+      "label": "Nettovermögen",
+      "options": [
+        "0 - 5.000€",
+        "5.000€ - 30.000€",
+        "30.000€ - 100.000€",
+        "100.000€ - 500.000€",
+        "500.000€ - 1.000.000€",
+        "Über 1.000.000€"
+      ],
+      "unknown": ["Möchte ich nicht angeben"],
+      "highFrom": "100.000€ - 500.000€"
+    }
+  },
+
+  "occupation": {
+    "label": "Beruf",
+    "_comment": "Werte hier ziehen eine Tier-Stufe ab. Rentner und Privatier stehen bewusst NICHT drin – bei Vermögensschutz oft die kaufkräftigste Gruppe.",
+    "downgrade": ["Schüler / Student / Azubi"]
+  },
+
+  "investments": {
+    "label": "Aktuelle Investments",
+    "_comment": "Wer hier 'Noch gar nicht' angibt, landet in D.",
+    "noneValues": ["Noch gar nicht"]
+  },
+
+  "points": {
+    "_comment": "Nur für Ø-Quali und Sortierung. Der Tier kommt aus den Regeln oben, nicht aus diesem Score.",
+    "high": 50,
+    "unknown": 25,
+    "low": 10,
+    "none": 5,
+    "downgradePenalty": 15
   },
 
   "tiers": [
-    { "key": "A", "label": "A · Top", "min": 75, "color": "#16a34a" },
-    { "key": "B", "label": "B · Gut", "min": 55, "color": "#65a30d" },
-    { "key": "C", "label": "C · Mittel", "min": 35, "color": "#d97706" },
-    { "key": "D", "label": "D · Schwach", "min": 0, "color": "#dc2626" }
+    { "key": "A", "label": "A · Top", "color": "#16a34a" },
+    { "key": "B", "label": "B · Gut", "color": "#65a30d" },
+    { "key": "C", "label": "C · Mittel", "color": "#d97706" },
+    { "key": "D", "label": "D · Schwach", "color": "#dc2626" }
   ]
 }

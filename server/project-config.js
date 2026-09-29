@@ -44,6 +44,14 @@ export const DEFAULT_CONFIG = {
       utmContent: ['utm_content'],
       ticketAt: ['vip-ticket geholt am'],
     },
+    // Umfrage-/Fragebogen-Tab (eigene Zeilen mit eigenen UTM-Werten).
+    surveyColumns: {
+      at: ['datum eintragung'],
+      firstName: ['vorname'],
+      lastName: ['nachname'],
+      email: ['e-mail', 'email'],
+      phone: ['handynummer'],
+    },
     ticketColumns: {
       at: ['teilgenommen am'],
       firstName: ['vorname'],
@@ -53,24 +61,25 @@ export const DEFAULT_CONFIG = {
       phone: ['handynummer'],
     },
     // Fragebogen-Spalten -> logische Antwortfelder (Basis fürs Scoring).
+    // Die Schluessel muessen zu config/scoring.json passen.
     questionnaireColumns: {
-      employment: ['angestellt selbstständig oder unternehmer'],
-      challenge: ['größte herausforderung im vermögensaufbau'],
-      income: ['monatliches einkommen'],
-      realEstate: ['immobilien im besitz'],
-      invested: ['geld investiert in den vermögensaufbau wenn ja wie viel'],
-      relationship: ['beziehungsstand'],
-      expectation: ['was erhoffst du dir von den 4 abenden'],
+      age: ['alter'],
+      occupation: ['beruf'],
+      investments: ['aktuelle investments'],
+      invest: ['höhe investments'],
+      wealth: ['nettovermögen'],
+      question: ['frage an thorsten'],
+      challenge: ['herausforderung'],
     },
     // Anzeige-Beschriftung der Antwortfelder (Lead-Detailansicht, CSV-Export).
     questionnaireLabels: {
-      employment: 'Beschäftigung',
-      challenge: 'Größte Herausforderung',
-      income: 'Monatliches Einkommen',
-      realEstate: 'Immobilien im Besitz',
-      invested: 'Investiertes Kapital',
-      relationship: 'Beziehungsstand',
-      expectation: 'Erwartung',
+      age: 'Alter',
+      occupation: 'Beruf',
+      investments: 'Aktuelle Investments',
+      invest: 'Investitionssumme / Monat',
+      wealth: 'Nettovermögen',
+      question: 'Frage an Thorsten',
+      challenge: 'Herausforderung',
     },
     overviewColumns: {
       status: ['status'],
