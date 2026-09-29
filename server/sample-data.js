@@ -5,9 +5,13 @@
  * dieselbe buildDataset-Pipeline.
  */
 
+// Demo-Kampagnen. Die letzte traegt bewusst das Umfrage-Kuerzel, damit der
+// Demo-Modus zeigt, wie sich der Qualitaets-Scope auswirkt (siehe
+// quality.campaignMatch in project.config.json).
 const campaigns = [
-  'J&P | MMV 15.06.-18.06. | ABO | 260526',
-  'J&P | MMV 15.06.-18.06. | ABO LP3 | 260526',
+  'DP | Demo | ABO | 260526',
+  'DP | Demo | ABO LP3 | 260526',
+  'DP | ccc202610 | ABO Interest Stack | Leads',
 ];
 const adsets = [
   'J&P | LP 1 | Broad | DACH | W | 30-55',
@@ -61,7 +65,7 @@ export function getSampleParsed(cfg = {}) {
   const next = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
 
   for (let i = 0; i < 48; i++) {
-    const campaign = i % 5 < 3 ? campaigns[0] : campaigns[1];
+    const campaign = i % 3 === 0 ? campaigns[2] : (i % 5 < 3 ? campaigns[0] : campaigns[1]);
     const adset = i % 5 < 3 ? rand(adsets.slice(0, 3), i) : rand(adsets.slice(3), i);
     const creative = rand(creatives, i + (i % 3));
     const placement = rand(placements, i * 2 + 1);
@@ -109,8 +113,9 @@ export function getSampleParsed(cfg = {}) {
   // Umfrage-Antworten fuer einen Teil der Leads (Demo)
   if (hasQuality) {
     for (let i = 0; i < 48; i += 2) {
-      const campaign = i % 5 < 3 ? campaigns[0] : campaigns[1];
-      const adset = i % 5 < 3 ? rand(adsets.slice(0, 3), i) : rand(adsets.slice(3), i);
+      // Nur die Webinar-Kampagne hat eine Umfrage.
+      const campaign = campaigns[2];
+      const adset = rand(adsets, i);
       const day = 24 + (i % 4);
       surveys.push({
         funnel: funnelFor(cfg, i),

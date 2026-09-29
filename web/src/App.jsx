@@ -155,8 +155,8 @@ export default function App() {
   const paidRows = useMemo(() => {
     if (!data) return [];
     const leads = drillLeads.filter((l) => l.sourceType === 'paid' && l.campaign !== UNATTRIB);
-    return aggregate(leads, tab, data.overviewByAdset, fb, drill);
-  }, [data, drillLeads, tab, fb, drill]);
+    return aggregate(leads, tab, data.overviewByAdset, fb, drill, { surveys: surveysFiltered });
+  }, [data, drillLeads, tab, fb, drill, surveysFiltered]);
 
   const organicRows = useMemo(() => {
     if (!data) return [];

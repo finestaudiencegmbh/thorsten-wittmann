@@ -78,7 +78,7 @@ function filterMetaByFunnel(meta, funnel) {
 }
 
 function emptyMetrics() {
-  return { spend: 0, impressions: 0, clicks: 0, uoc: 0, leads: 0, tickets: 0, scoreSum: 0, scored: 0, qualified: 0 };
+  return { spend: 0, impressions: 0, clicks: 0, uoc: 0, leads: 0, tickets: 0, surveys: 0, scoreSum: 0, scored: 0, qualified: 0 };
 }
 
 /** Leitet die abgeleiteten Kennzahlen aus den Rohsummen ab. */
@@ -108,8 +108,13 @@ function derive(m, features = {}) {
       cvrTicket: m.leads ? m.tickets / m.leads : null, // Lead -> Ticket
     } : {}),
     ...(hasQuality ? {
+      // Bezugsgroesse sind die Umfrage-Antworten; ohne Umfrage faellt das
+      // Projekt auf die Tickets zurueck (Ursprungsprojekt).
+      surveys: m.surveys,
       avgQuality: m.scored ? Math.round(m.scoreSum / m.scored) : null,
-      qualifiedRate: m.tickets ? m.qualified / m.tickets : null,
+      qualifiedRate: (m.surveys || m.tickets)
+        ? m.qualified / (m.surveys || m.tickets)
+        : null,
     } : {}),
   };
 }
@@ -136,10 +141,14 @@ function pathKey(dim, { campaign, adset, creative }) {
  */
 export function combineMetaWithLeads(meta, leads, opts = {}) {
   const { funnel = null, features = {} } = opts;
+  // Umfrage-Antworten tragen ihre EIGENEN UTM-Werte. Die Qualitaet haengt
+  // deshalb nicht am E-Mail-Abgleich mit dem Lead-Tab.
+  let surveys = opts.surveys || [];
   // Funnel-Sicht: Leads ueber den Sheet-Tab, Meta-Daten ueber den Kampagnennamen.
   if (funnel) {
     meta = filterMetaByFunnel(meta, funnel);
     leads = (leads || []).filter((l) => l.funnel === funnel.id);
+    surveys = surveys.filter((s) => s.funnel === funnel.id);
   }
   const { entities = [], daily = [], dailyEntities = [], campaignStatus = {}, adsetStatus = {}, adStatus = {}, adList = [] } = meta || {};
 
@@ -201,6 +210,10 @@ export function combineMetaWithLeads(meta, leads, opts = {}) {
   // dort, wo es entstand – nicht in jeder Kampagne, in der die Person Lead war.
   const leadBy = { campaign: new Map(), adset: new Map(), creative: new Map() };
   const ticketBy = { campaign: new Map(), adset: new Map(), creative: new Map() };
+  // Qualitaet kommt aus den Umfrage-Antworten und wird getrennt gezaehlt.
+  // Frueher hing sie an l.hasTicket - ohne Tickets lief sie nie und alle
+  // Kampagnen zeigten dauerhaft "-", auch die mit Umfrage.
+  const qualityBy = { campaign: new Map(), adset: new Map(), creative: new Map() };
   // Distinkte Creatives je Anzeigengruppen-Pfad AUS DEM SHEET (utm_medium unter
   // utm_source). Damit erscheint jede Anzeige, die in den Leads vorkommt, als
   // Zeile in ihrer Anzeigengruppe – unabhängig von Metas Ad-Liste.
@@ -243,10 +256,35 @@ export function combineMetaWithLeads(meta, leads, opts = {}) {
       }
     }
   }
+  for (const sv of surveys) {
+    for (const dim of ['campaign', 'adset', 'creative']) {
+      if (!normKey(leafName(dim, sv))) continue;
+      const k = pathKey(dim, sv);
+      if (!qualityBy[dim].has(k)) qualityBy[dim].set(k, { surveys: 0, scoreSum: 0, scored: 0, qualified: 0 });
+      const e = qualityBy[dim].get(k);
+      e.surveys += 1;
+      if (sv.quality) {
+        e.scoreSum += sv.quality.score;
+        e.scored += 1;
+        if (['A', 'B'].includes(sv.quality.tier)) e.qualified += 1;
+      }
+    }
+  }
+
   const lookupLeads = (dim, parts) => {
     const L = leadBy[dim].get(pathKey(dim, parts)) || { leads: 0 };
     const T = ticketBy[dim].get(pathKey(dim, parts)) || { tickets: 0, scoreSum: 0, scored: 0, qualified: 0 };
-    return { leads: L.leads, tickets: T.tickets, scoreSum: T.scoreSum, scored: T.scored, qualified: T.qualified };
+    const Q = qualityBy[dim].get(pathKey(dim, parts)) || { surveys: 0, scoreSum: 0, scored: 0, qualified: 0 };
+    return {
+      leads: L.leads,
+      tickets: T.tickets,
+      surveys: Q.surveys,
+      // Tickets und Umfragen schliessen sich in der Praxis aus; die Summe
+      // haelt beide Projekt-Varianten am Leben.
+      scoreSum: T.scoreSum + Q.scoreSum,
+      scored: T.scored + Q.scored,
+      qualified: T.qualified + Q.qualified,
+    };
   };
 
   // Hierarchie aufbauen: Kampagne -> Anzeigengruppe -> Ad
@@ -293,6 +331,7 @@ export function combineMetaWithLeads(meta, leads, opts = {}) {
       uoc: e.uniqueOutboundClicks,
       leads: adLeads.leads,
       tickets: adLeads.tickets,
+      surveys: adLeads.surveys,
       scoreSum: adLeads.scoreSum,
       scored: adLeads.scored,
       qualified: adLeads.qualified,
@@ -315,6 +354,7 @@ export function combineMetaWithLeads(meta, leads, opts = {}) {
   const applyLeadStats = (m, src) => {
     m.leads = src.leads;
     m.tickets = src.tickets;
+    m.surveys = src.surveys;
     m.scoreSum = src.scoreSum;
     m.scored = src.scored;
     m.qualified = src.qualified;

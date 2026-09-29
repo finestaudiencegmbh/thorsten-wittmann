@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { fmtEur, fmtInt, fmtPct, entityKey, minuteSeriesFromEvents } from '../lib.js';
-import { hasTickets, hasQuality } from '../config.js';
+import { hasTickets, hasQuality, hasQualityForCampaign } from '../config.js';
 import GraphPanel from './GraphPanel.jsx';
 
 /** Kleiner "Grafik"-Button (öffnet die Zeitreihen-Ansicht). */
@@ -20,8 +20,9 @@ const fmtEur2 = (n) => (n == null ? '–' : new Intl.NumberFormat('de-DE', { sty
 const fmtScore = (n) => (n == null ? '–' : String(Math.round(n)));
 
 /** Kennzahlen in drei Sektionen – ohne horizontales Scrollen, alles umbruchfähig. */
-function Metrics({ n, leadHidden }) {
+function Metrics({ n, leadHidden, withQuality = true }) {
   const lead = (v) => (leadHidden ? '–' : v);
+  const showQuality = hasQuality && withQuality;
   const groups = [
     {
       title: 'Ergebnis', cls: 'g-result',
@@ -34,9 +35,10 @@ function Metrics({ n, leadHidden }) {
       ],
     },
     {
-      title: hasQuality ? 'Qualität & Funnel' : 'Funnel', cls: 'g-quality',
+      title: showQuality ? 'Qualität & Funnel' : 'Funnel', cls: 'g-quality',
       items: [
-        ...(hasQuality ? [
+        ...(showQuality ? [
+          ['Umfragen', lead(fmtInt(n.surveys))],
           ['Quali-Rate', lead(fmtPct(n.qualifiedRate))],
           ['Ø Quali', lead(fmtScore(n.avgQuality))],
         ] : []),
@@ -123,7 +125,7 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                 <span className="cc-head-spend">{fmtEur(c.spend)}</span>
                 {hasGraph('campaign', { campaign: c.name }) && <GraphBtn onClick={() => openGraph('campaign', { campaign: c.name }, c.name)} />}
               </div>
-              <Metrics n={c} leadHidden={leadHidden} />
+              <Metrics n={c} leadHidden={leadHidden} withQuality={hasQualityForCampaign(c.name)} />
 
               {cOpen && (
                 <div className="cc-children">
@@ -141,13 +143,13 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                             <span className="cc-sm-item"><b>{fmtEur(a.spend)}</b> Adspend</span>
                             <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtInt(a.leads)}</b> Leads</span>
                             <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtEur(a.cpl)}</b> CPL</span>
-                            {hasQuality && <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtPct(a.qualifiedRate)}</b> Quali</span>}
+                            {hasQualityForCampaign(c.name) && <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtPct(a.qualifiedRate)}</b> Quali</span>}
                           </span>
                           {hasGraph('adset', { campaign: c.name, adset: a.name }) && <GraphBtn onClick={() => openGraph('adset', { campaign: c.name, adset: a.name }, a.name)} />}
                         </div>
                         {aOpen && (
                           <div className="cc-sub-body">
-                            <Metrics n={a} leadHidden={leadHidden} />
+                            <Metrics n={a} leadHidden={leadHidden} withQuality={hasQualityForCampaign(c.name)} />
                             {ads.length > 0 && (
                               <div className="cc-ads">
                                 <div className="cc-ad cc-ad-headrow">
@@ -156,7 +158,7 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                                   <span>Leads</span>
                                   <span>CPL</span>
                                   {hasTickets && <span>Tickets</span>}
-                                  {hasQuality && <span>Quali-Rate</span>}
+                                  {hasQualityForCampaign(c.name) && <span>Quali-Rate</span>}
                                   <span>CVR Start</span>
                                   <span>CTR ausg.</span>
                                 </div>
@@ -172,7 +174,7 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                                     <span>{leadHidden ? '–' : fmtInt(ad.leads)}</span>
                                     <span>{leadHidden ? '–' : fmtEur(ad.cpl)}</span>
                                     {hasTickets && <span>{leadHidden ? '–' : fmtInt(ad.tickets)}</span>}
-                                    {hasQuality && <span>{leadHidden ? '–' : fmtPct(ad.qualifiedRate)}</span>}
+                                    {hasQualityForCampaign(c.name) && <span>{leadHidden ? '–' : fmtPct(ad.qualifiedRate)}</span>}
                                     <span>{leadHidden ? '–' : fmtPct(ad.cvrStart)}</span>
                                     <span>{fmtPct(ad.outboundCtr)}</span>
                                   </div>

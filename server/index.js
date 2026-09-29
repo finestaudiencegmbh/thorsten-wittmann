@@ -84,14 +84,21 @@ async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
       const agg = aggregateFb(all.records);
       // Leads für denselben Zeitraum, damit FB-Hierarchie & Leads konsistent sind
       const leadsInRange = filterLeadsByRange(dataset.leads, from, to);
+      // Umfragen nach demselben Zeitraum filtern (eigenes Datumsfeld).
+      const surveysInRange = (dataset.surveys || []).filter((sv) => {
+        const day = (sv.at || '').slice(0, 10);
+        if (from && (!day || day < from)) return false;
+        if (to && (!day || day > to)) return false;
+        return true;
+      });
       // Stunden-Raster, wenn genau ein Tag gewählt ist
       const hourlyDay = from && to && from === to ? from : null;
-      const combined = combineMetaWithLeads(all, leadsInRange, { hourlyDay, features: FEATURES });
+      const combined = combineMetaWithLeads(all, leadsInRange, { hourlyDay, features: FEATURES, surveys: surveysInRange });
       // Pro Funnel dieselbe Auswertung auf dem gefilterten Datensatz. Das
       // Hauptdashboard zeigt weiterhin die Summe ueber alle Funnels.
       const funnelViews = {};
       for (const f of FUNNELS) {
-        const c = combineMetaWithLeads(all, leadsInRange, { hourlyDay, features: FEATURES, funnel: f });
+        const c = combineMetaWithLeads(all, leadsInRange, { hourlyDay, features: FEATURES, funnel: f, surveys: surveysInRange });
         funnelViews[f.id] = {
           label: f.label || f.id,
           hierarchy: c.hierarchy, daily: c.daily, totals: c.totals,

@@ -129,7 +129,10 @@ function spendForAdsets(adsetNames, overviewByAdset) {
  * Anzeigengruppe aus der Sheet-Übersicht (nur Kampagne/Anzeigengruppe).
  */
 export function aggregate(leads, dimKey, overviewByAdset, fb, filters = {}, opts = {}) {
-  const { addFbRows = true } = opts; // FB-only-Zeilen (pausierte/leere Kampagnen) ergänzen?
+  // surveys: Umfrage-Antworten mit EIGENEN Dimensionen. Die Qualität hängt
+  // daran und nicht an den Tickets – sonst bliebe sie bei abgeschalteten
+  // Tickets dauerhaft leer.
+  const { addFbRows = true, surveys = [] } = opts; // FB-only-Zeilen (pausierte/leere Kampagnen) ergänzen?
   const fbDim = addFbRows ? (fb?.byDim?.[dimKey] || null) : null;
   // Tickets werden nach ihrer EIGENEN Herkunft (Ticket-UTM) gezählt, nicht nach
   // der Lead-Zeile – sonst landet ein Ticket in jeder Kampagne, in der die Person
@@ -138,7 +141,7 @@ export function aggregate(leads, dimKey, overviewByAdset, fb, filters = {}, opts
   const tDimKey = TICKET_DIM[dimKey];
   const groups = new Map();
   const ensure = (k) => {
-    if (!groups.has(k)) groups.set(k, { key: k, leads: [], tickets: [], adsets: new Set() });
+    if (!groups.has(k)) groups.set(k, { key: k, leads: [], tickets: [], surveys: [], adsets: new Set() });
     return groups.get(k);
   };
   for (const l of leads) {
@@ -152,16 +155,24 @@ export function aggregate(leads, dimKey, overviewByAdset, fb, filters = {}, opts
     ensure(tk).tickets.push(l);
   }
 
+  // Umfragen nach ihrer eigenen Dimension einsortieren.
+  for (const sv of surveys) {
+    ensure(sv[dimKey] || '(unbekannt)').surveys.push(sv);
+  }
+
   const rows = [];
   for (const g of groups.values()) {
     const total = g.leads.length;
     const ticketLeads = g.tickets;
     const tickets = ticketLeads.length;
-    const scored = hasQuality ? ticketLeads.filter((l) => l.quality) : [];
+    // Basis für die Qualität: Umfragen, ersatzweise Tickets (Ursprungsprojekt).
+    const qBase = hasQuality ? (g.surveys.length ? g.surveys : ticketLeads) : [];
+    const scored = qBase.filter((x) => x.quality);
     const avgQuality = scored.length
-      ? Math.round(scored.reduce((s, l) => s + l.quality.score, 0) / scored.length)
+      ? Math.round(scored.reduce((s, x) => s + x.quality.score, 0) / scored.length)
       : null;
-    const qualified = hasQuality ? ticketLeads.filter((l) => ['A', 'B'].includes(l.quality?.tier)).length : 0;
+    const qualified = qBase.filter((x) => ['A', 'B'].includes(x.quality?.tier)).length;
+    const surveyCount = g.surveys.length;
 
     const dm = addFbRows ? (fb?.dimMeta?.[dimKey]?.[normKey(g.key)] || null) : null;
     const m = fbDim ? fbDim[normKey(g.key)] : null;
@@ -173,7 +184,7 @@ export function aggregate(leads, dimKey, overviewByAdset, fb, filters = {}, opts
     const clicks = (m ? m.clicks : null) ?? (dm ? dm.clicks : null);
     const uoc = addFbRows ? (fb?.uocByDim?.[dimKey]?.[normKey(g.key)] ?? (dm ? dm.uoc : null)) : null;
 
-    rows.push(makeRow({ key: g.key, total, tickets, avgQuality, qualified, spend, impressions, clicks, uoc, active: dm ? dm.active : null }));
+    rows.push(makeRow({ key: g.key, total, tickets, surveys: surveyCount, qBase: qBase.length, avgQuality, qualified, spend, impressions, clicks, uoc, active: dm ? dm.active : null }));
   }
 
   // Pausierte/aktive FB-Einträge OHNE Leads im Zeitraum ergänzen, damit auch
@@ -188,14 +199,14 @@ export function aggregate(leads, dimKey, overviewByAdset, fb, filters = {}, opts
       if (filters.campaign && meta.parents?.campaign && normKey(meta.parents.campaign) !== normKey(filters.campaign)) continue;
       if (filters.adset && meta.parents?.adset && normKey(meta.parents.adset) !== normKey(filters.adset)) continue;
       const uoc = fb?.uocByDim?.[dimKey]?.[k] ?? meta.uoc ?? null;
-      rows.push(makeRow({ key: meta.name, total: 0, tickets: 0, avgQuality: null, qualified: 0, spend: meta.spend, impressions: meta.impressions, clicks: meta.clicks, uoc, active: meta.active }));
+      rows.push(makeRow({ key: meta.name, total: 0, tickets: 0, surveys: 0, qBase: 0, avgQuality: null, qualified: 0, spend: meta.spend, impressions: meta.impressions, clicks: meta.clicks, uoc, active: meta.active }));
     }
   }
   return rows;
 }
 
 /** Baut eine Ergebniszeile inkl. abgeleiteter Kennzahlen. */
-function makeRow({ key, total, tickets, avgQuality, qualified, spend, impressions, clicks, uoc, active }) {
+function makeRow({ key, total, tickets, surveys = 0, qBase = 0, avgQuality, qualified, spend, impressions, clicks, uoc, active }) {
   return {
     key,
     active,
@@ -205,9 +216,10 @@ function makeRow({ key, total, tickets, avgQuality, qualified, spend, impression
       ticketRate: total ? tickets / total : null,
     } : {}),
     ...(hasQuality ? {
+      surveys,
       avgQuality,
       qualified,
-      qualifiedRate: tickets ? qualified / tickets : null,
+      qualifiedRate: qBase ? qualified / qBase : null,
     } : {}),
     spend,
     impressions,

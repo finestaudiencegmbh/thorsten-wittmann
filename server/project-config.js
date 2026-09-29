@@ -154,6 +154,7 @@ export function publicConfig(cfg) {
     features: cfg.features,
     funnels: (cfg.funnels || []).map((f) => ({ id: f.id, label: f.label || f.id })),
     utmMapping: (cfg.sheet || {}).utmMapping || {},
+    quality: cfg.quality || {},
     trafficSources: (cfg.trafficSources || []).map((s) => ({ id: s.id, label: s.label || s.id, paid: s.paid !== false, hasSpend: Boolean(s.hasSpend) })),
   };
 }

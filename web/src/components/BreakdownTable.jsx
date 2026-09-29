@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { fmtEur, fmtInt, fmtPct, fmtScore } from '../lib.js';
-import { hasTickets, hasQuality } from '../config.js';
+import { hasTickets, hasQuality, hasQualityForCampaign } from '../config.js';
 
 export default function BreakdownTable({ rows, dimLabel, onSelect, tiers, showActiveToggle = true }) {
   const [sort, setSort] = useState({ col: 'leads', dir: 'desc' });
@@ -12,6 +12,9 @@ export default function BreakdownTable({ rows, dimLabel, onSelect, tiers, showAc
   const hasSpend = rows.some((r) => r.spend != null);
   const hasImpressions = rows.some((r) => r.impressions != null);
   const hasOutbound = rows.some((r) => r.outboundClicks != null);
+  // Quali-Spalten nur, wenn mindestens eine sichtbare Zeile ueberhaupt eine
+  // Umfrage haben kann - sonst stuenden dort nur Striche.
+  const hasQualityRows = hasQuality && rows.some((r) => hasQualityForCampaign(r.key) || r.surveys > 0);
 
   const cols = useMemo(() => {
     // Reihenfolge wie gewünscht (links -> rechts)
@@ -23,7 +26,8 @@ export default function BreakdownTable({ rows, dimLabel, onSelect, tiers, showAc
       base.push({ key: 'cpl', label: '€/Lead', fmt: fmtEur });                 // 4
       if (hasTickets) base.push({ key: 'cpt', label: '€/Ticket', fmt: fmtEur }); // 5
     }
-    if (hasQuality) {
+    if (hasQualityRows) {
+      base.push({ key: 'surveys', label: 'Umfragen', fmt: fmtInt });
       base.push({ key: 'qualifiedRate', label: 'Quali-Rate', fmt: fmtPct });   // 6
       base.push({ key: 'avgQuality', label: 'Ø Quali', fmt: fmtScore });       // 7
     }
@@ -36,7 +40,7 @@ export default function BreakdownTable({ rows, dimLabel, onSelect, tiers, showAc
       base.push({ key: 'outboundClicks', label: 'Ausg. Klicks', fmt: fmtInt }); // 13
     }
     return base;
-  }, [dimLabel, hasSpend, hasImpressions, hasOutbound]);
+  }, [dimLabel, hasSpend, hasImpressions, hasOutbound, hasQualityRows]);
 
   const sorted = useMemo(() => {
     const arr = [...visibleRows];

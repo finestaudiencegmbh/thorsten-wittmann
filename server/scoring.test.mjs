@@ -138,5 +138,39 @@ assert.equal(ds.leads[0].hasSurvey, true);
 assert.equal(ds.counts.leads, 1, 'Umfragen erhoehen die Lead-Anzahl nicht');
 assert.deepEqual(ds.counts.byTier, { C: 1, A: 1 });
 
+// --- 6) Qualitaet in der Kampagnen-Hierarchie ------------------------------
+// Frueher hing die Aggregation an l.hasTicket. Ohne Tickets lief sie nie -
+// jede Kampagne zeigte dauerhaft "-", auch die mit Umfrage.
+const { combineMetaWithLeads } = await import('./combine.js');
+const OTHER = 'CCC EWeb | ABO | LeadCon | 18.04.2026';
+const ent = (c, a, spend) => ({
+  campaignId: c, campaign: c, adsetId: a, adset: a, adId: `${a}-ad`, creative: 'Ad',
+  spend, impressions: 9000, clicks: 100, cpm: 12, uniqueOutboundClicks: 60,
+});
+const hMeta = {
+  entities: [ent(CAMP, AG, 810), ent(OTHER, 'AG Alt', 500)],
+  daily: [], dailyEntities: [],
+  campaignStatus: {
+    [CAMP]: { status: 'ACTIVE', active: true, objective: 'OUTCOME_LEADS' },
+    [OTHER]: { status: 'ACTIVE', active: true, objective: 'OUTCOME_LEADS' },
+  },
+  adsetStatus: {}, adStatus: {}, adList: [],
+};
+const hier = combineMetaWithLeads(hMeta, ds.leads, {
+  features: PCFG.features,
+  surveys: ds.surveys,
+}).hierarchy;
+
+const webinar = hier.find((c) => c.name === CAMP);
+const other = hier.find((c) => c.name === OTHER);
+assert.equal(webinar.surveys, 2, 'Umfragen landen auf der Webinar-Kampagne');
+assert.equal(webinar.qualifiedRate, 0.5, 'einer von zwei ist A/B');
+assert.equal(webinar.avgQuality, 60, 'Mittelwert aus A(100) und C(20)');
+assert.equal(other.surveys, 0, 'Kampagne ohne Umfrage');
+assert.equal(other.qualifiedRate, null, 'und damit KEINE erfundene Quote');
+assert.equal(other.avgQuality, null);
+// Auch auf Anzeigengruppen-Ebene
+assert.equal(webinar.adsets[0].surveys, 2);
+
 console.log('✓ Alle Scoring-/Umfrage-Tests bestanden');
 console.log(`  Tiers: A=${aScore} B=${bScore} C=${cScore} D=${dScore} | Umfragen: ${ds.surveys.length}, Leads: ${ds.counts.leads}`);

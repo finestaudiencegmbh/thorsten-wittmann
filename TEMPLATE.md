@@ -159,6 +159,17 @@ zählte jede Antwort zusätzlich als Lead. Der Parser prüft deshalb zuerst auf
 mindestens zwei Fragebogen-Spalten. Heißt: `questionnaireColumns` muss
 stimmen, sonst verschiebt sich die Lead-Anzahl.
 
+**Nicht jede Kampagne hat eine Umfrage.** `quality.campaignMatch` in
+`project.config.json` legt fest, welche:
+
+```jsonc
+"quality": { "campaignMatch": ["ccc202610"] }
+```
+
+Kampagnen außerhalb dieses Musters zeigen die Qualitäts-Kennzahlen gar nicht
+an, statt dauerhaft „–" in jeder Zeile — das sieht sonst nach kaputt aus statt
+nach „gibt es hier nicht". Leere Liste = alle Kampagnen.
+
 **Bewertungsmodell** (`config/scoring.json`, `model: "criteria"`): Der Tier
 ergibt sich aus Regeln, nicht aus einer Punktsumme — A = beide Geld-Kriterien
 auf High, B = eines (oder beide ohne Angabe), C = darunter, D = investiert

@@ -32,6 +32,22 @@ const UTM_MAPPING = PROJECT.sheet?.utmMapping || {
 };
 export const hasDimension = (key) => Boolean(UTM_MAPPING[key]);
 
+/**
+ * Nicht jede Kampagne hat eine Umfrage. quality.campaignMatch in
+ * project.config.json sagt, welche. Bei allen anderen werden die
+ * Qualitaets-Kennzahlen gar nicht erst angezeigt - ein dauerhaftes "-" in
+ * jeder Zeile sieht nach kaputt aus, nicht nach "gibt es hier nicht".
+ * Leere Liste = alle Kampagnen (kein Scope konfiguriert).
+ */
+const QUALITY_MATCH = (PROJECT.quality?.campaignMatch || []).map((p) => String(p).toLowerCase());
+
+export function hasQualityForCampaign(name) {
+  if (!hasQuality) return false;
+  if (!QUALITY_MATCH.length) return true;
+  const hay = String(name ?? '').toLowerCase();
+  return QUALITY_MATCH.some((p) => hay.includes(p));
+}
+
 // ---- Farbableitung ---------------------------------------------------------
 // Aus EINER Akzentfarbe werden alle Abstufungen berechnet, damit ein neues
 // Projekt nur einen Hex-Wert pflegen muss.
