@@ -54,6 +54,7 @@ function Metrics({ n, leadHidden, withQuality = true }) {
       items: [
         ...(showQuality ? [
           ['Umfragen', lead(fmtInt(n.surveys))],
+          ['€/Umfrage', lead(fmtEur(n.cps))],
           ['Quali-Rate', lead(fmtPct(n.qualifiedRate))],
           ['Ø Quali', lead(fmtScore(n.avgQuality))],
         ] : []),
@@ -166,7 +167,11 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                             <span className="cc-sm-item"><b>{fmtEur(a.spend)}</b> Adspend</span>
                             <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtInt(a.leads)}</b> Leads</span>
                             <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtEur(a.cpl)}</b> CPL</span>
-                            {hasQualityForCampaign(c.name) && <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtPct(a.qualifiedRate)}</b> Quali</span>}
+                            {hasQualityForCampaign(c.name) && <>
+                              <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtInt(a.surveys)}</b> Umfragen</span>
+                              <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtEur(a.cps)}</b> €/Umfrage</span>
+                              <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtPct(a.qualifiedRate)}</b> Quali</span>
+                            </>}
                           </span>
                           {hasGraph('adset', { campaign: c.name, adset: a.name }) && <GraphBtn onClick={() => openGraph('adset', { campaign: c.name, adset: a.name }, a.name)} />}
                         </div>
@@ -181,6 +186,8 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                                   <span>Leads</span>
                                   <span>CPL</span>
                                   {hasTickets && <span>Tickets</span>}
+                                  {hasQualityForCampaign(c.name) && <span>Umfragen</span>}
+                                  {hasQualityForCampaign(c.name) && <span>€/Umfrage</span>}
                                   {hasQualityForCampaign(c.name) && <span>Quali-Rate</span>}
                                   <span>CVR Start</span>
                                   <span>CTR ausg.</span>
@@ -197,6 +204,8 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                                     <span>{leadHidden ? '–' : fmtInt(ad.leads)}</span>
                                     <span>{leadHidden ? '–' : fmtEur(ad.cpl)}</span>
                                     {hasTickets && <span>{leadHidden ? '–' : fmtInt(ad.tickets)}</span>}
+                                    {hasQualityForCampaign(c.name) && <span>{leadHidden ? '–' : fmtInt(ad.surveys)}</span>}
+                                    {hasQualityForCampaign(c.name) && <span>{leadHidden ? '–' : fmtEur(ad.cps)}</span>}
                                     {hasQualityForCampaign(c.name) && <span>{leadHidden ? '–' : fmtPct(ad.qualifiedRate)}</span>}
                                     <span>{leadHidden ? '–' : fmtPct(ad.cvrStart)}</span>
                                     <span>{fmtPct(ad.outboundCtr)}</span>

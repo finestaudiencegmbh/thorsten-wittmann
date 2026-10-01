@@ -217,6 +217,7 @@ function makeRow({ key, total, tickets, surveys = 0, qBase = 0, avgQuality, qual
     } : {}),
     ...(hasQuality ? {
       surveys,
+      cps: spend != null && surveys ? spend / surveys : null,
       avgQuality,
       qualified,
       qualifiedRate: qBase ? qualified / qBase : null,

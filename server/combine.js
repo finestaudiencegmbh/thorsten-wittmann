@@ -107,7 +107,7 @@ function unassignedNode({ level, name, leads, features, first = null, last = nul
     cpl: null,
     lpConversion: null, cvrStart: null,
     ...(hasTickets ? { tickets: 0, cpt: null, cvrTicket: null } : {}),
-    ...(hasQuality ? { surveys: 0, avgQuality: null, qualifiedRate: null } : {}),
+    ...(hasQuality ? { surveys: 0, cps: null, avgQuality: null, qualifiedRate: null } : {}),
     ...(level === 'adset' ? { ads: [] } : {}),
   };
 }
@@ -146,6 +146,9 @@ function derive(m, features = {}) {
       // Bezugsgroesse sind die Umfrage-Antworten; ohne Umfrage faellt das
       // Projekt auf die Tickets zurueck (Ursprungsprojekt).
       surveys: m.surveys,
+      // Kosten pro Umfrage-Antwort. Nur sinnvoll, wo es ueberhaupt eine
+      // Umfrage gibt - sonst null statt einer Division durch 0.
+      cps: m.surveys ? round2(m.spend / m.surveys) : null,
       avgQuality: m.scored ? Math.round(m.scoreSum / m.scored) : null,
       qualifiedRate: (m.surveys || m.tickets)
         ? m.qualified / (m.surveys || m.tickets)

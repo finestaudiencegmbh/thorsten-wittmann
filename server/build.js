@@ -95,14 +95,24 @@ function isPaid(utm, paidAdsets, patterns) {
   // Harte Regel: konfigurierte Organisch-Muster (ManyChat, Bio, ...) gewinnen immer.
   if (isOrganicSource(utm, patterns)) return false;
   const src = collapse(utm.source);
-  if (!src) return false;
-  if (paidAdsets.has(src.toLowerCase())) return true;
-  // Bezahlte Anzeigen folgen dem Schema "X | Y | Z | ..." – das kann in der
-  // Anzeigengruppe (utm_source), der Kampagne (utm_campaign) ODER dem Creative
-  // (utm_medium) stehen. Manche Konten nutzen Pipes nur im Kampagnennamen.
-  if (`${src} ${collapse(utm.campaign)} ${collapse(utm.medium)}`.includes('|')) return true;
+  if (src && paidAdsets.has(src.toLowerCase())) return true;
+
+  // Bezahlte Anzeigen folgen dem Schema "X | Y | Z | ...". Das kann in JEDEM
+  // der Namensfelder stehen - welches davon Kampagne, Anzeigengruppe oder
+  // Creative traegt, ist von Konto zu Konto verschieden (sheet.utmMapping).
+  //
+  // Bewusst OHNE Vorbedingung auf utm_source: manche Tracking-Ketten liefern
+  // Kampagne, Anzeigengruppe und Creative, lassen utm_source/utm_medium aber
+  // leer. Ein frueher Abbruch bei leerer Source stufte solche Leads als
+  // organisch ein - sie fielen damit komplett aus der Kampagnen-Attribution,
+  // obwohl ihre Kampagne eindeutig benannt war.
+  const names = [utm.source, utm.campaign, utm.medium, utm.term, utm.content]
+    .map((v) => collapse(v))
+    .join(' ');
+  if (names.includes('|')) return true;
+
   // Rein numerische Source = Meta-ID -> bezahlt (aber nicht eindeutig zuordenbar).
-  if (isNumericId(src)) return true;
+  if (src && isNumericId(src)) return true;
   return false;
 }
 

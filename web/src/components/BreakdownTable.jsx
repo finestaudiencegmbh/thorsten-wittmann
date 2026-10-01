@@ -28,6 +28,7 @@ export default function BreakdownTable({ rows, dimLabel, onSelect, tiers, showAc
     }
     if (hasQualityRows) {
       base.push({ key: 'surveys', label: 'Umfragen', fmt: fmtInt });
+      if (hasSpend) base.push({ key: 'cps', label: '€/Umfrage', fmt: fmtEur });
       base.push({ key: 'qualifiedRate', label: 'Quali-Rate', fmt: fmtPct });   // 6
       base.push({ key: 'avgQuality', label: 'Ø Quali', fmt: fmtScore });       // 7
     }

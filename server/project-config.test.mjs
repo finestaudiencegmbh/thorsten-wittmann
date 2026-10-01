@@ -426,6 +426,57 @@ assert.equal(cut.warnings.length, 0, 'bewusst ignoriert ist kein Datenverlust - 
 // Ohne Stichtag zaehlen wieder alle
 assert.equal(parseSheets(cutSheets, CFG).leads.length, 4);
 
+// --- 6k) Leere utm_source darf nicht "organisch" bedeuten ------------------
+// Ab 01.10. liefert die Tracking-Kette Kampagne, Anzeigengruppe und Creative,
+// laesst utm_source/utm_medium aber leer. Die Paid-Erkennung haing an
+// utm_source: leer -> organisch -> faellt komplett aus der Kampagnen-
+// Attribution, obwohl die Kampagne eindeutig benannt ist. Ergebnis im
+// Dashboard: 0 Leads bei vollem Adspend.
+const noSrc = buildDataset(
+  parseSheets([{ title: 'Leads CCC Webinar 10.10.26', values: [WEB_HEAD,
+    // genau das Muster aus dem Sheet: Spalten E und F leer
+    ['October 01 2026 00:04:00', 'Sylvia', '', 'sylvia@x.de', '', '', WCAMP, WAG, WAD],
+    ['October 01 2026 07:04:00', 'Lisa', '', 'lisa@x.de', '', '', WCAMP, WAG, WAD],
+    // ohne jede Kampagne bleibt es organisch
+    ['October 01 2026 13:18:00', 'Klaus', '', 'klaus@x.de', '', '', '', '', ''],
+  ] }], CFG),
+  { weights: {}, tiers: [] },
+  CFG,
+);
+assert.equal(noSrc.leads.length, 3);
+assert.equal(noSrc.counts.paidLeads, 2, 'leere utm_source, aber benannte Kampagne -> bezahlt');
+assert.equal(noSrc.counts.organicLeads, 1, 'ohne Kampagne bleibt es organisch');
+assert.equal(noSrc.leads[0].adset, WAG, 'und wird bis auf Anzeigengruppen-Ebene zugeordnet');
+assert.equal(noSrc.leads[0].creative, WAD);
+
+// --- 6l) Kosten pro Umfrage je Ebene ---------------------------------------
+const cpsMeta = {
+  entities: [{
+    campaignId: WCAMP, campaign: WCAMP, adsetId: WAG, adset: WAG, adId: WAD, creative: WAD,
+    spend: 600, impressions: 20000, clicks: 200, cpm: 12, uniqueOutboundClicks: 150,
+  }],
+  daily: [], dailyEntities: [],
+  campaignStatus: { [WCAMP]: { status: 'ACTIVE', active: true, objective: 'OUTCOME_LEADS' } },
+  adsetStatus: {}, adStatus: {}, adList: [],
+};
+const cpsSurveys = [
+  { at: '2026-10-01T09:00:00.000Z', funnel: 'CCC', campaign: WCAMP, adset: WAG, creative: WAD, quality: { score: 100, tier: 'A' }, answers: {} },
+  { at: '2026-10-01T10:00:00.000Z', funnel: 'CCC', campaign: WCAMP, adset: WAG, creative: WAD, quality: { score: 20, tier: 'C' }, answers: {} },
+];
+// Dieser Block braucht aktives Quality-Flag - sonst laesst derive() die
+// Umfrage-Kennzahlen bewusst weg.
+const qFeatures = { hasTickets: false, hasQuality: true };
+const cpsCamp = combineMetaWithLeads(cpsMeta, noSrc.leads, { features: qFeatures, surveys: cpsSurveys }).hierarchy[0];
+assert.equal(cpsCamp.surveys, 2);
+assert.equal(cpsCamp.cps, 300, '600 € / 2 Umfragen');
+assert.equal(cpsCamp.adsets[0].cps, 300, 'auch auf Anzeigengruppen-Ebene');
+assert.equal(cpsCamp.adsets[0].ads[0].cps, 300, 'und auf Anzeigen-Ebene');
+
+// Ohne Umfragen kein erfundener Preis
+const noSurvey = combineMetaWithLeads(cpsMeta, noSrc.leads, { features: qFeatures, surveys: [] }).hierarchy[0];
+assert.equal(noSurvey.surveys, 0);
+assert.equal(noSurvey.cps, null, 'keine Division durch 0');
+
 // --- 7) Funnel-Ansicht in combine ------------------------------------------
 const meta = {
   entities: [
