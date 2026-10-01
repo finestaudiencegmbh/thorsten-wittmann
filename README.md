@@ -8,6 +8,11 @@ CSV-Export.
 **Zwei Funnels:** `CCC` und `AKD` liegen in getrennten Sheet-Tabs und bekommen
 je einen Unterreiter. Das Hauptdashboard („Gesamt") summiert beide.
 
+**Webinar-Leads zählen ab 01.10.2026.** Davor lagen im Tab
+`Leads CCC Webinar 10.10.26` nur Kampagnenname und Quelle vor, keine
+Anzeigengruppe und kein Creative. Gesteuert über `sheet.ignoreBefore` in
+`project.config.json` — die CCC/AKD-Historie seit August bleibt unberührt.
+
 **Traffic-Quellen** werden getrennt ausgewiesen: Meta (Kosten via API, bildet
 den CPL), Google (bezahlt, Kosten nicht angebunden — bewusst **nicht** im CPL)
 und Organisch.

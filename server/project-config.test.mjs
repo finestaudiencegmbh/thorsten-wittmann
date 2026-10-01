@@ -397,6 +397,35 @@ assert.match(_internal.parseDate('46296'), /^2026-10-01/);
 assert.equal(_internal.parseDate('161'), null, 'Zaehlzeile bleibt kein Datum');
 assert.equal(_internal.parseDate('1030.11'), null, 'Betrag bleibt kein Datum');
 
+// --- 6j) Stichtag je Tab ---------------------------------------------------
+// Im Webinar-Tab sind die UTM-Werte erst ab 01.10. vollstaendig. Davor nur der
+// Kampagnenname - halbe Zuordnung verzerrt den AG-CPL mehr, als sie nuetzt.
+const CUT_CFG = {
+  ...CFG,
+  sheet: { ...CFG.sheet, ignoreBefore: [{ sheetTab: 'webinar', date: '2026-10-01' }] },
+};
+const cutSheets = [
+  { title: 'Leads CCC Webinar 10.10.26', values: [WEB_HEAD,
+    ['September 29 2026 22:33:00', 'Alt', '', 'alt@x.de', 'meta', 'ppc', WCAMP, '', ''],
+    ['September 30 2026 08:00:00', 'Alt2', '', 'alt2@x.de', 'meta', 'ppc', WCAMP, '', ''],
+    ['October 1 2026 09:12:00', 'Neu', '', 'neu@x.de', 'meta', 'ppc', WCAMP, WAG, WAD],
+  ] },
+  // Anderer Tab: darf vom Stichtag NICHT betroffen sein
+  { title: 'Leads CCC', values: [
+    ['Datum', 'Vorname', 'E-Mail', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'],
+    ['2026-08-20 10:00:00', 'Hist', 'h@x.de', 'meta', 'ppc', 'CCC EWeb | ABO | LeadCon', 'DE | 40-65+J', ''],
+  ] },
+];
+const cut = parseSheets(cutSheets, CUT_CFG);
+assert.equal(cut.leads.length, 2, 'ein Webinar-Lead ab Stichtag + ein Altbestands-Lead aus anderem Tab');
+assert.ok(cut.leads.some((l) => l.utm.term === WAG), 'der Lead ab 01.10. ist dabei');
+assert.ok(cut.leads.some((l) => l.utm.campaign.includes('EWeb')), 'anderer Tab bleibt unberuehrt');
+assert.deepEqual(cut.ignoredByTab, [{ sheet: 'Leads CCC Webinar 10.10.26', count: 2, cutoff: '2026-10-01' }]);
+assert.equal(cut.warnings.length, 0, 'bewusst ignoriert ist kein Datenverlust - keine Warnung');
+
+// Ohne Stichtag zaehlen wieder alle
+assert.equal(parseSheets(cutSheets, CFG).leads.length, 4);
+
 // --- 7) Funnel-Ansicht in combine ------------------------------------------
 const meta = {
   entities: [

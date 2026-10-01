@@ -243,6 +243,21 @@ const num = (s) => {
  * Der Tab ist die verlässlichste Quelle: Leads aus Reoptin-Mails, Newslettern
  * oder Google Ads tragen oft gar kein Funnel-Kürzel in den UTM-Werten.
  */
+/**
+ * Stichtag fuer einen Tab: Zeilen davor werden ignoriert. Gedacht fuer
+ * Zeitraeume, in denen das Tracking noch unvollstaendig war - halbe Zuordnung
+ * verzerrt die Auswertung mehr, als sie nuetzt.
+ */
+export function cutoffForTab(title, cfg = DEFAULT_CONFIG) {
+  const t = key(title);
+  if (!t) return null;
+  for (const rule of (cfg.sheet || {}).ignoreBefore || []) {
+    const needle = key(rule.sheetTab || '');
+    if (needle && t.includes(needle)) return rule.date || null;
+  }
+  return null;
+}
+
 export function funnelForTab(title, cfg = DEFAULT_CONFIG) {
   const t = key(title);
   if (!t) return null;
@@ -381,11 +396,16 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
   const hasTickets = Boolean(cfg.features?.hasTickets);
   const hasQuality = Boolean(cfg.features?.hasQuality);
   const overviewCols = (cfg.sheet || DEFAULT_CONFIG.sheet).overviewColumns || {};
+  const ignoredByTab = [];
 
   for (const sheet of sheets) {
     const rows = sheet.values || [];
     // Der Tab bestimmt den Funnel – nicht der Kampagnenname.
     const funnel = funnelForTab(sheet.title, cfg);
+    const cutoff = cutoffForTab(sheet.title, cfg);
+    // Bewusst ignorierte Zeilen - NICHT als Datenverlust melden, das ist so
+    // gewollt. Wird nur gezaehlt, damit die Zahl nachvollziehbar bleibt.
+    let ignoredBefore = 0;
     // Zeilen mit Inhalt, die nicht gelesen werden konnten (meist unlesbares
     // Datum). Frueher verschwanden die kommentarlos - genau die Sorte Fehler,
     // die im Dashboard nicht auffaellt.
@@ -401,6 +421,7 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
           if (!hasQuality) continue;
           const r = parseSurveyRow(o, cfg);
           if (!r) continue;
+          if (cutoff && r.at && r.at.slice(0, 10) < cutoff) { ignoredBefore += 1; continue; }
           // Dedupe ueber E-Mail + Zeitpunkt (Formulare liefern gelegentlich
           // doppelte Zeilen).
           const dk = `${r.email}|${r.at || ''}`;
@@ -409,7 +430,9 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
           surveys.push({ ...r, funnel });
         } else if (table.type === 'leads') {
           const r = parseLeadRow(o, cfg);
-          if (r) {
+          if (r && cutoff && r.wonAt.slice(0, 10) < cutoff) {
+            ignoredBefore += 1;
+          } else if (r) {
             leads.push({ ...r, funnel });
           } else if (row.filter((c) => norm(c)).length >= 3) {
             // Nur Zeilen zaehlen, die wie ein echter Datensatz aussehen.
@@ -429,6 +452,9 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
         }
       }
     }
+    if (ignoredBefore > 0) {
+      ignoredByTab.push({ sheet: sheet.title, count: ignoredBefore, cutoff });
+    }
     if (skipped > 0) {
       warnings.push({
         kind: 'unparsed-rows',
@@ -441,7 +467,7 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
     }
   }
 
-  return { leads, tickets, surveys, overview, warnings };
+  return { leads, tickets, surveys, overview, warnings, ignoredByTab };
 }
 
-export const _internal = { classifyHeader, key, num, parseDate, toIsoText, iterateTables, decodePlus, decodeEntities, pick, parseSurveyRow };
+export const _internal = { classifyHeader, key, num, parseDate, toIsoText, iterateTables, decodePlus, decodeEntities, pick, parseSurveyRow, cutoffForTab };

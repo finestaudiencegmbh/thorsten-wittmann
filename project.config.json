@@ -120,7 +120,14 @@
       "wealth": "Nettovermögen",
       "question": "Frage an Thorsten",
       "challenge": "Herausforderung"
-    }
+    },
+    "ignoreBefore": [
+      {
+        "sheetTab": "webinar",
+        "date": "2026-10-01",
+        "reason": "Vollstaendige UTMs (utm_term/utm_content) erst ab 01.10.2026. Davor nur Kampagnenname - halbe Zuordnung verzerrt den AG-CPL mehr, als sie nuetzt."
+      }
+    ]
   },
   "trafficSources": [
     {

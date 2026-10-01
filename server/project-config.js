@@ -106,6 +106,11 @@ export const DEFAULT_CONFIG = {
       creative: 'utmMedium',
       placement: 'utmTerm',
     },
+    // Zeilen vor einem Stichtag ignorieren - je Tab. Gedacht fuer Phasen, in
+    // denen das Tracking noch unvollstaendig war: lieber gar nicht zaehlen als
+    // mit halber Zuordnung. Leere Liste = alles zaehlt.
+    // [{ sheetTab: 'webinar', date: '2026-10-01', reason: '...' }]
+    ignoreBefore: [],
     // Manche Sheets speichern UTM-Werte URL-kodiert ("A+|+B" statt "A | B").
     // Ohne Rückwandlung matchen sie nicht gegen die Meta-Kampagnennamen.
     decodePlusAsSpace: false,

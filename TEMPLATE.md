@@ -128,6 +128,30 @@ nicht. Der CPL auf **Kampagnen-Ebene stimmt** weiterhin. Für Vergleiche
 zwischen Anzeigengruppen deshalb einen Zeitraum wählen, der erst nach der
 vollständigen UTM-Umstellung beginnt.
 
+### Stichtag je Tab: `ignoreBefore`
+
+War das Tracking eine Zeit lang unvollständig, lohnt es sich, diese Phase ganz
+auszublenden statt sie halb zuzuordnen:
+
+```jsonc
+"sheet": {
+  "ignoreBefore": [
+    { "sheetTab": "webinar", "date": "2026-10-01",
+      "reason": "vollständige UTMs erst ab 01.10." }
+  ]
+}
+```
+
+`sheetTab` ist ein Teilstring des Tab-Titels — der Stichtag wirkt also **nur
+auf diesen Tab**, andere Lead-Tabs behalten ihre Historie. Ignorierte Zeilen
+lösen **keine** Warnung aus (sie sind ja gewollt), werden aber in
+`ignoredByTab` mitgezählt.
+
+**Dazu passend den Zeitraum wählen:** Die Meta-Kosten werden vom gewählten
+Zeitraum bestimmt, nicht vom Stichtag. Beginnt der Zeitraum vor dem Stichtag,
+zählen die Kosten dieser Tage mit, die Leads aber nicht — der CPL ist dann zu
+hoch. Zeitraum ab dem Stichtag wählen, dann passt beides zusammen.
+
 ### Datumsformate (automatisch)
 
 Tabs desselben Sheets schreiben Datumswerte oft unterschiedlich:
