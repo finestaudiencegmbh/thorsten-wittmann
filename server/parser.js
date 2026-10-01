@@ -124,13 +124,59 @@ function isEmptyRow(row) {
   return !row || row.every((c) => norm(c) === '');
 }
 
+// Monatsnamen deutsch und englisch, jeweils auch als uebliche Abkuerzung.
+// Die Tabs desselben Sheets schreiben Datumswerte unterschiedlich: der
+// Umfrage-Tab ISO ("2026-09-28 23:17:13"), der Webinar-Lead-Tab mit
+// Monatsnamen ("September 29 2026 22:33:00").
+const MONTH_NAMES = {
+  januar: 1, january: 1, jan: 1,
+  februar: 2, february: 2, feb: 2,
+  'märz': 3, maerz: 3, march: 3, mar: 3, mrz: 3,
+  april: 4, apr: 4,
+  mai: 5, may: 5,
+  juni: 6, june: 6, jun: 6,
+  juli: 7, july: 7, jul: 7,
+  august: 8, aug: 8,
+  september: 9, sept: 9, sep: 9,
+  oktober: 10, october: 10, okt: 10, oct: 10,
+  november: 11, nov: 11,
+  dezember: 12, december: 12, dez: 12, dec: 12,
+};
+
+const pad2 = (n) => String(Number(n) || 0).padStart(2, '0');
+const monthNum = (name) => MONTH_NAMES[String(name || '').toLowerCase()];
+
+/**
+ * Bringt verbreitete Schreibweisen auf ISO-Text. Liefert null, wenn der Wert
+ * kein Datum ist - das haelt Zaehl-/Summenzeilen wie "161" oder "0" draussen,
+ * die sonst als Jahr 161 durchgingen.
+ */
+function toIsoText(v) {
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v;
+
+  // "September 29 2026 22:33:00" / "Sep 29, 2026"
+  let m = v.match(/^([A-Za-zÄÖÜäöüß]+)\.?\s+(\d{1,2})\.?,?\s+(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m && monthNum(m[1])) {
+    return `${m[3]}-${pad2(monthNum(m[1]))}-${pad2(m[2])} ${pad2(m[4])}:${pad2(m[5])}:${pad2(m[6])}`;
+  }
+  // "29. September 2026 22:33"
+  m = v.match(/^(\d{1,2})\.?\s+([A-Za-zÄÖÜäöüß]+)\.?\s+(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m && monthNum(m[2])) {
+    return `${m[3]}-${pad2(monthNum(m[2]))}-${pad2(m[1])} ${pad2(m[4])}:${pad2(m[5])}:${pad2(m[6])}`;
+  }
+  // "19.09.2026 06:37"
+  m = v.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m) {
+    return `${m[3]}-${pad2(m[2])}-${pad2(m[1])} ${pad2(m[4])}:${pad2(m[5])}:${pad2(m[6])}`;
+  }
+  return null;
+}
+
 function parseDate(s) {
-  const v = norm(s);
+  const raw = norm(s);
+  if (!raw) return null;
+  const v = toIsoText(raw);
   if (!v) return null;
-  // Nur echte Datumsangaben akzeptieren (Format im Sheet:
-  // "2026-05-26 18:46:08 +0000"). Verhindert, dass Zähl-/Summenzeilen
-  // wie "161" fälschlich als Datum (Jahr 161) interpretiert werden.
-  if (!/^\d{4}-\d{2}-\d{2}/.test(v)) return null;
   const d = new Date(v.replace(' +0000', 'Z').replace(' ', 'T'));
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
@@ -368,4 +414,4 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
   return { leads, tickets, surveys, overview, warnings };
 }
 
-export const _internal = { classifyHeader, key, num, parseDate, iterateTables, decodePlus, decodeEntities, pick, parseSurveyRow };
+export const _internal = { classifyHeader, key, num, parseDate, toIsoText, iterateTables, decodePlus, decodeEntities, pick, parseSurveyRow };

@@ -23,7 +23,9 @@ const CFG = {
   ],
   sheet: {
     ...DEFAULT_CONFIG.sheet,
-    leadColumns: { ...DEFAULT_CONFIG.sheet.leadColumns, wonAt: ['gewonnen am', 'datum'] },
+    // Wie in project.config.json: der Webinar-Tab nennt die Spalte
+    // "Datum Eintragung", die Lead-Tabs "Datum".
+    leadColumns: { ...DEFAULT_CONFIG.sheet.leadColumns, wonAt: ['gewonnen am', 'datum', 'datum eintragung'] },
     // Dieses Sheet legt die Anzeigengruppe in utm_term ab, nicht in utm_source.
     utmMapping: { campaign: 'utmCampaign', adset: 'utmTerm', creative: 'utmContent', placement: null },
     decodePlusAsSpace: true,
@@ -265,6 +267,51 @@ assert.equal(plusCamp.adsets[0].name, PLUS_ADSET, 'Anzeige nutzt den echten Meta
 assert.equal(plusCamp.adsets[0].leads, 2,
   'Anzeigengruppe mit "+" im Namen bekommt ihre Leads (vorher 0 bei vollem Spend)');
 assert.equal(plusCamp.adsets[0].spend, 69);
+
+// --- 6f) Datumsformate: die Tabs schreiben unterschiedlich -----------------
+// Umfrage-Tab: ISO. Webinar-Lead-Tab: Monatsname ("September 29 2026 22:33:00").
+// Wird nur ISO akzeptiert, verschwinden die Webinar-Leads stillschweigend -
+// ohne Fehlermeldung, die Zeilen fehlen einfach.
+const pd = _internal.parseDate;
+assert.equal(pd('2026-09-28 23:17:13'), '2026-09-28T23:17:13.000Z');
+assert.equal(pd('2026-05-26 18:46:08 +0000'), '2026-05-26T18:46:08.000Z');
+assert.equal(pd('September 29 2026 22:33:00'), '2026-09-29T22:33:00.000Z');
+assert.equal(pd('Sep 29, 2026'), '2026-09-29T00:00:00.000Z');
+assert.equal(pd('29. September 2026 22:33'), '2026-09-29T22:33:00.000Z');
+assert.equal(pd('19.09.2026 06:37'), '2026-09-19T06:37:00.000Z');
+// Zaehl-/Summenzeilen duerfen weiterhin NICHT als Datum durchgehen
+for (const junk of ['0', '161', '', 'Noch gar nicht', 'Angestellt']) {
+  assert.equal(pd(junk), null, `"${junk}" ist kein Datum`);
+}
+
+// --- 6g) Webinar-Lead-Tab: Monatsname + unvollstaendige UTMs ---------------
+const WEB_HEAD = ['Datum Eintragung', 'Vorname', 'Nachname', 'E-Mail',
+  'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+const WCAMP = 'DP | ccc202610 | ABO Interest Stack | Leads';
+const WAG = 'AG1: DP | ccc202610 | Broad | DE | MW 30-55';
+const WAD = 'AG1 ccc202610 DP: Video TW 0406';
+const webDs = buildDataset(
+  parseSheets([{ title: 'Leads CCC Webinar 10.10.26', values: [WEB_HEAD,
+    ['0', '', '', '', '', '', '', '', ''],
+    // Umstellungsphase: nur utm_campaign gesetzt
+    ['September 29 2026 22:33:00', 'Anne', '', 'anne@x.de', 'meta', 'ppc', WCAMP, '', ''],
+    // ab 30.09. vollstaendig
+    ['September 30 2026 01:16:00', 'Steffen', '', 'steffen@x.de', 'meta', 'ppc', WCAMP, WAG, WAD],
+  ] }], CFG),
+  { weights: {}, tiers: [] },
+  CFG,
+);
+assert.equal(webDs.leads.length, 2, 'Monatsnamen-Datum wird gelesen (vorher 0 Leads)');
+assert.equal(webDs.leads[0].funnel, 'CCC');
+
+// Fehlt die Anzeigengruppe, bleibt die Kampagne trotzdem zugeordnet.
+assert.equal(webDs.leads[0].campaign, WCAMP, 'Kampagne bleibt erhalten');
+assert.notEqual(webDs.leads[0].adset, WAG);
+assert.match(webDs.leads[0].adset, /nicht zuordenbar/);
+// Vollstaendige Zeile wird bis auf Creative-Ebene zugeordnet
+assert.equal(webDs.leads[1].campaign, WCAMP);
+assert.equal(webDs.leads[1].adset, WAG);
+assert.equal(webDs.leads[1].creative, WAD);
 
 // --- 7) Funnel-Ansicht in combine ------------------------------------------
 const meta = {

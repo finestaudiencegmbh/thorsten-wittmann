@@ -148,10 +148,23 @@ export function buildDataset({ leads, tickets, surveys = [], overview }, cfg, pr
     const rawAdset2 = dimValue(utm, 'adset');
     const rawCreative2 = dimValue(utm, 'creative');
     if (!paid) return { ...base, paid: false, campaign: organicLabel, adset: organicLabel, creative: rawCreative2 || organicLabel };
-    if (isNumericId(rawCampaign2) || isNumericId(rawAdset2) || !rawCampaign2 || !rawAdset2) {
+
+    // Je Ebene einzeln entscheiden. Fehlt die Anzeigengruppe, ist die Kampagne
+    // trotzdem bekannt - frueher fiel sie mit weg und der Lead landete
+    // komplett unter "nicht zuordenbar". Genau das passiert in einer
+    // Umstellungsphase, in der erst utm_campaign gesetzt wird und utm_term
+    // noch fehlt.
+    const usable = (v) => Boolean(v) && !isNumericId(v);
+    if (!usable(rawCampaign2)) {
       return { ...base, paid: true, campaign: unattribLabel, adset: unattribLabel, creative: rawCreative2 || unattribLabel };
     }
-    return { ...base, paid: true, campaign: rawCampaign2, adset: rawAdset2, creative: rawCreative2 || unattribLabel };
+    // Ohne Kampagne laesst sich eine Anzeigengruppe nicht einhaengen (der
+    // Hierarchie-Schluessel ist Kampagne ▸ Anzeigengruppe) - umgekehrt schon.
+    const adset = usable(rawAdset2) ? rawAdset2 : unattribLabel;
+    const creative = adset === unattribLabel
+      ? unattribLabel
+      : (usable(rawCreative2) ? rawCreative2 : unattribLabel);
+    return { ...base, paid: true, campaign: rawCampaign2, adset, creative };
   };
 
   // Umfrage-Antworten nach E-Mail indizieren. Reichert die Lead-Zeilen an,

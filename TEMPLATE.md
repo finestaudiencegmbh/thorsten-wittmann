@@ -111,6 +111,30 @@ Quellen-Erkennung.
 Nach dem Deploy gegenprüfen: eine Kampagne aufklappen. Steht bei einer
 Anzeigengruppe Adspend, aber 0 Leads, ist die Zuordnung falsch.
 
+**Unvollständige UTMs** sind kein Totalausfall: Ist `utm_campaign` gesetzt,
+aber `utm_term` noch leer (typisch während einer Tracking-Umstellung), bleibt
+die Kampagne zugeordnet; nur Anzeigengruppe und Creative laufen unter
+„(Paid · nicht zuordenbar)". Vorher fiel in dem Fall die ganze Zeile heraus.
+
+### Datumsformate (automatisch)
+
+Tabs desselben Sheets schreiben Datumswerte oft unterschiedlich:
+
+```
+2026-09-28 23:17:13          ISO
+September 29 2026 22:33:00   Monatsname (englisch)
+29. September 2026 22:33     Monatsname (deutsch)
+19.09.2026 06:37             deutsch, numerisch
+```
+
+Alle vier werden erkannt. Das ist wichtiger, als es klingt: Eine Zeile mit
+unlesbarem Datum wird **stillschweigend verworfen** — ohne Fehlermeldung, die
+Leads fehlen einfach. Zähl- und Summenzeilen (`0`, `161`) bleiben weiterhin
+draußen, sonst landete „161" als Jahr 161 im Datensatz.
+
+**Nach dem ersten Deploy gegenprüfen:** Lead-Anzahl im Dashboard gegen die
+Zeilenzahl im Sheet. Weicht sie ab, ist meist das Datumsformat schuld.
+
 ### HTML-Entities (automatisch)
 
 Manche Tracking-Ketten schreiben Sonderzeichen escaped ins Sheet:
