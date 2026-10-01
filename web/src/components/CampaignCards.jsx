@@ -35,6 +35,19 @@ function unassignedHint(node) {
 }
 
 /** Kennzahlen in drei Sektionen – ohne horizontales Scrollen, alles umbruchfähig. */
+/**
+ * Anzahl der Zahlen-Spalten in der Anzeigen-Tabelle. Muss zur Markup-Reihe
+ * passen, sonst verrutscht das Raster - deshalb hier EINMAL berechnet und per
+ * CSS-Variable an das Grid gegeben, statt im Stylesheet fest verdrahtet.
+ */
+function adMetricCols(withQuality) {
+  // Adspend, Leads, CPL, CVR Start, CTR ausg.
+  let n = 5;
+  if (hasTickets) n += 1;              // Tickets
+  if (withQuality) n += 3;             // Umfragen, €/Umfrage, Quali-Rate
+  return n;
+}
+
 function Metrics({ n, leadHidden, withQuality = true }) {
   const lead = (v) => (leadHidden ? '–' : v);
   const showQuality = hasQuality && withQuality;
@@ -169,7 +182,7 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                             <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtEur(a.cpl)}</b> CPL</span>
                             {hasQualityForCampaign(c.name) && <>
                               <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtInt(a.surveys)}</b> Umfragen</span>
-                              <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtEur(a.cps)}</b> €/Umfrage</span>
+                              <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtEur(a.cps)}</b> €/Umfr.</span>
                               <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtPct(a.qualifiedRate)}</b> Quali</span>
                             </>}
                           </span>
@@ -180,7 +193,7 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                             <Metrics n={a} leadHidden={leadHidden} withQuality={hasQualityForCampaign(c.name)} />
                             {ads.length > 0 && (
                               <div className="cc-ads">
-                                <div className="cc-ad cc-ad-headrow">
+                                <div className="cc-ad cc-ad-headrow" style={{ '--cc-ad-cols': adMetricCols(hasQualityForCampaign(c.name)) }}>
                                   <span className="cc-ad-name">Werbeanzeige</span>
                                   <span>Adspend</span>
                                   <span>Leads</span>
@@ -193,7 +206,7 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                                   <span>CTR ausg.</span>
                                 </div>
                                 {ads.map((ad) => (
-                                  <div key={ad.id} className={`cc-ad ${ad.active === false ? 'is-paused' : ''}`}>
+                                  <div key={ad.id} className={`cc-ad ${ad.active === false ? 'is-paused' : ''}`} style={{ '--cc-ad-cols': adMetricCols(hasQualityForCampaign(c.name)) }}>
                                     <span className="cc-ad-name" title={ad.name}>
                                       {ad.active != null && <span className={`status-dot ${ad.active ? 'on' : 'off'}`} />}
                                       <span className="cc-ad-label">{ad.name}</span>
