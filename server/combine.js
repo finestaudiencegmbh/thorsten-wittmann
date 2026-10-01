@@ -77,6 +77,36 @@ function filterMetaByFunnel(meta, funnel) {
   };
 }
 
+// Zeile fuer Leads, die einer Ebene zugeordnet sind, aber keiner ihrer
+// Unterebenen. Entsteht z. B., wenn utm_campaign gesetzt ist, utm_term aber
+// fehlt (Tracking-Umstellung). Ohne diese Zeile fehlen die Leads zwischen den
+// Ebenen spurlos: Kampagne 30, Summe der Anzeigengruppen 10.
+const UNASSIGNED = { adset: '(ohne Anzeigengruppe)', creative: '(ohne Creative)' };
+
+/**
+ * Baut die Auffangzeile. Kosten bleiben bewusst null statt 0 - der Spend
+ * steckt in den echten Anzeigengruppen, ein CPL waere hier erfunden.
+ */
+function unassignedNode({ level, name, leads, features }) {
+  const hasTickets = features.hasTickets !== false;
+  const hasQuality = features.hasQuality !== false;
+  return {
+    id: `unassigned:${level}:${name}`,
+    name,
+    level,
+    active: null,
+    unassigned: true,
+    spend: null, impressions: null, outboundClicks: null,
+    cpm: null, outboundCtr: null, cpoc: null,
+    leads,
+    cpl: null,
+    lpConversion: null, cvrStart: null,
+    ...(hasTickets ? { tickets: 0, cpt: null, cvrTicket: null } : {}),
+    ...(hasQuality ? { surveys: 0, avgQuality: null, qualifiedRate: null } : {}),
+    ...(level === 'adset' ? { ads: [] } : {}),
+  };
+}
+
 function emptyMetrics() {
   return { spend: 0, impressions: 0, clicks: 0, uoc: 0, leads: 0, tickets: 0, surveys: 0, scoreSum: 0, scored: 0, qualified: 0 };
 }
@@ -384,18 +414,30 @@ export function combineMetaWithLeads(meta, leads, opts = {}) {
         const adM = { spend: 0, impressions: 0, clicks: 0, uoc: 0, ...lookupLeads('creative', { campaign: c.name, adset: a.name, creative: cname }) };
         a.ads.push({ id: `sheet:${ck}`, name: cname, level: 'ad', active: resolveAdActive(c.name, a.name, cname), ...derive(adM, features) });
       }
-      adsets.push({
+      const adNode = {
         id: a.id, name: a.name, level: 'adset', active: a.active, status: a.status,
         ...derive(a._m, features),
         ads: a.ads.sort((x, y) => y.spend - x.spend),
-      });
+      };
+      // Leads der Anzeigengruppe, die keiner ihrer Anzeigen zugeordnet sind
+      // (utm_content fehlt) - sichtbar machen statt verschwinden lassen.
+      const adRest = adNode.leads - adNode.ads.reduce((sum, x) => sum + (x.leads || 0), 0);
+      if (adRest > 0) {
+        adNode.ads.push(unassignedNode({ level: 'ad', name: UNASSIGNED.creative, leads: adRest, features }));
+      }
+      adsets.push(adNode);
     }
-    result.push({
+    const campNode = {
       id: c.id, name: c.name, account: c.account, level: 'campaign', active: c.active, status: c.status,
       objective: c.objective, leadCampaign: c.leadCampaign,
       ...derive(c._m, features),
       adsets: adsets.sort((x, y) => y.spend - x.spend),
-    });
+    };
+    const adsetRest = campNode.leads - campNode.adsets.reduce((sum, x) => sum + (x.leads || 0), 0);
+    if (adsetRest > 0) {
+      campNode.adsets.push(unassignedNode({ level: 'adset', name: UNASSIGNED.adset, leads: adsetRest, features }));
+    }
+    result.push(campNode);
   }
   result.sort((x, y) => y.spend - x.spend);
 

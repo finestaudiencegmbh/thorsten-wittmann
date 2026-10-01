@@ -116,6 +116,18 @@ aber `utm_term` noch leer (typisch während einer Tracking-Umstellung), bleibt
 die Kampagne zugeordnet; nur Anzeigengruppe und Creative laufen unter
 „(Paid · nicht zuordenbar)". Vorher fiel in dem Fall die ganze Zeile heraus.
 
+Solche Leads erscheinen in der Hierarchie als eigene Zeile
+**„(ohne Anzeigengruppe)"** bzw. **„(ohne Creative)"** — ohne sie klaffte eine
+stille Lücke (Kampagne 30 Leads, Summe der Anzeigengruppen 10). Die Zeile hat
+bewusst **keine Kosten und keinen CPL**: Der Spend steckt in den echten
+Anzeigengruppen, ein CPL wäre dort erfunden.
+
+**Wichtig fürs Lesen der Zahlen:** Solange solche Zeilen auftauchen, ist der
+CPL auf Anzeigengruppen-Ebene zu hoch — die Kosten sind vollständig, die Leads
+nicht. Der CPL auf **Kampagnen-Ebene stimmt** weiterhin. Für Vergleiche
+zwischen Anzeigengruppen deshalb einen Zeitraum wählen, der erst nach der
+vollständigen UTM-Umstellung beginnt.
+
 ### Datumsformate (automatisch)
 
 Tabs desselben Sheets schreiben Datumswerte oft unterschiedlich:

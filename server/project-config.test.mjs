@@ -313,6 +313,48 @@ assert.equal(webDs.leads[1].campaign, WCAMP);
 assert.equal(webDs.leads[1].adset, WAG);
 assert.equal(webDs.leads[1].creative, WAD);
 
+// --- 6h) Leads ohne Anzeigengruppe duerfen nicht verschwinden --------------
+// Waehrend der Tracking-Umstellung tragen Leads nur utm_campaign. Sie zaehlen
+// auf Kampagnen-Ebene, passen aber zu keiner Anzeigengruppe. Ohne Auffangzeile
+// klafft eine stille Luecke: Kampagne 30 Leads, Summe der Anzeigengruppen 10.
+const MIX_C = 'DP | ccc202610 | ABO Interest Stack | Leads';
+const MIX_AG = 'AG1: DP | ccc202610 | Broad | DE | MW 30-55';
+const mixRows = [];
+for (let i = 0; i < 20; i++) {
+  mixRows.push([`September 29 2026 1${i % 10}:00:00`, `Alt${i}`, '', `alt${i}@x.de`, 'meta', 'ppc', MIX_C, '', '']);
+}
+for (let i = 0; i < 10; i++) {
+  mixRows.push([`October 1 2026 1${i % 10}:00:00`, `Neu${i}`, '', `neu${i}@x.de`, 'meta', 'ppc', MIX_C, MIX_AG, 'Video TW 0406']);
+}
+const mixDs = buildDataset(
+  parseSheets([{ title: 'Leads CCC Webinar 10.10.26', values: [WEB_HEAD, ...mixRows] }], CFG),
+  { weights: {}, tiers: [] },
+  CFG,
+);
+assert.equal(mixDs.leads.length, 30);
+
+const mixMeta = {
+  entities: [{
+    campaignId: MIX_C, campaign: MIX_C, adsetId: MIX_AG, adset: MIX_AG,
+    adId: 'ad1', creative: 'Video TW 0406',
+    spend: 1200, impressions: 30000, clicks: 300, cpm: 12, uniqueOutboundClicks: 200,
+  }],
+  daily: [], dailyEntities: [],
+  campaignStatus: { [MIX_C]: { status: 'ACTIVE', active: true, objective: 'OUTCOME_LEADS' } },
+  adsetStatus: {}, adStatus: {}, adList: [],
+};
+const mixCamp = combineMetaWithLeads(mixMeta, mixDs.leads, { features }).hierarchy[0];
+assert.equal(mixCamp.leads, 30, 'alle Leads zaehlen auf Kampagnen-Ebene');
+const sumAdsets = mixCamp.adsets.reduce((a, x) => a + x.leads, 0);
+assert.equal(sumAdsets, mixCamp.leads, 'Summe der Anzeigengruppen == Kampagne (keine stille Luecke)');
+
+const rest = mixCamp.adsets.find((a) => a.unassigned);
+assert.ok(rest, 'Auffangzeile vorhanden');
+assert.equal(rest.leads, 20);
+assert.equal(rest.spend, null, 'Kosten bleiben null - der Spend steckt in den echten Anzeigengruppen');
+assert.equal(rest.cpl, null, 'kein erfundener CPL');
+assert.notEqual(rest.active, false, 'darf vom "nur aktive"-Filter nicht ausgeblendet werden');
+
 // --- 7) Funnel-Ansicht in combine ------------------------------------------
 const meta = {
   entities: [
