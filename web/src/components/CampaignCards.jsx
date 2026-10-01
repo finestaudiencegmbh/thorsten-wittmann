@@ -19,6 +19,21 @@ function GraphBtn({ onClick, compact }) {
 const fmtEur2 = (n) => (n == null ? '–' : new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n));
 const fmtScore = (n) => (n == null ? '–' : String(Math.round(n)));
 
+/** "2026-09-29" -> "29.09." */
+const shortDay = (iso) => {
+  if (!iso) return '';
+  const [y, m, d] = String(iso).split('-');
+  return y && m && d ? `${d}.${m}.` : '';
+};
+
+/** Zeitraum der nicht zugeordneten Leads - erklaert, WARUM sie hier haengen. */
+function unassignedHint(node) {
+  const a = shortDay(node.firstAt);
+  const b = shortDay(node.lastAt);
+  if (!a && !b) return null;
+  return a === b ? a : `${a}–${b}`;
+}
+
 /** Kennzahlen in drei Sektionen – ohne horizontales Scrollen, alles umbruchfähig. */
 function Metrics({ n, leadHidden, withQuality = true }) {
   const lead = (v) => (leadHidden ? '–' : v);
@@ -139,6 +154,14 @@ export default function CampaignCards({ hierarchy, dailyByEntity, intradayByEnti
                           <span className={`caret ${aOpen ? 'open' : ''}`}>▶</span>
                           <StatusDot active={a.active} />
                           <span className="cc-subname" title={a.name}>{a.name}</span>
+                          {a.unassigned && unassignedHint(a) && (
+                            <span
+                              className="cc-hint"
+                              title="Diese Leads tragen kein utm_term, lassen sich also keiner Anzeigengruppe zuordnen. Der Adspend steckt in den Anzeigengruppen oben – deren CPL ist dadurch zu hoch."
+                            >
+                              {unassignedHint(a)} · ohne utm_term
+                            </span>
+                          )}
                           <span className="cc-sub-meta">
                             <span className="cc-sm-item"><b>{fmtEur(a.spend)}</b> Adspend</span>
                             <span className="cc-sm-item"><b>{leadHidden ? '–' : fmtInt(a.leads)}</b> Leads</span>

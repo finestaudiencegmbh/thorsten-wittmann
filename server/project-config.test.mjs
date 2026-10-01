@@ -354,6 +354,9 @@ assert.equal(rest.leads, 20);
 assert.equal(rest.spend, null, 'Kosten bleiben null - der Spend steckt in den echten Anzeigengruppen');
 assert.equal(rest.cpl, null, 'kein erfundener CPL');
 assert.notEqual(rest.active, false, 'darf vom "nur aktive"-Filter nicht ausgeblendet werden');
+// Zeitraum der betroffenen Leads: beantwortet, WARUM sie nicht zugeordnet sind
+assert.equal(rest.firstAt, '2026-09-29');
+assert.equal(rest.lastAt, '2026-09-29', 'alle unzugeordneten Leads stammen aus der Zeit vor der UTM-Umstellung');
 
 // --- 7) Funnel-Ansicht in combine ------------------------------------------
 const meta = {

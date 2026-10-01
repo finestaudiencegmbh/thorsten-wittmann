@@ -87,7 +87,7 @@ const UNASSIGNED = { adset: '(ohne Anzeigengruppe)', creative: '(ohne Creative)'
  * Baut die Auffangzeile. Kosten bleiben bewusst null statt 0 - der Spend
  * steckt in den echten Anzeigengruppen, ein CPL waere hier erfunden.
  */
-function unassignedNode({ level, name, leads, features }) {
+function unassignedNode({ level, name, leads, features, first = null, last = null }) {
   const hasTickets = features.hasTickets !== false;
   const hasQuality = features.hasQuality !== false;
   return {
@@ -96,6 +96,11 @@ function unassignedNode({ level, name, leads, features }) {
     level,
     active: null,
     unassigned: true,
+    // Zeitraum der betroffenen Leads. Beantwortet die Frage, die diese Zeile
+    // immer aufwirft: "warum sind die nicht zugeordnet?" - meist, weil sie aus
+    // der Zeit vor der UTM-Umstellung stammen.
+    firstAt: first,
+    lastAt: last,
     spend: null, impressions: null, outboundClicks: null,
     cpm: null, outboundCtr: null, cpoc: null,
     leads,
@@ -435,7 +440,22 @@ export function combineMetaWithLeads(meta, leads, opts = {}) {
     };
     const adsetRest = campNode.leads - campNode.adsets.reduce((sum, x) => sum + (x.leads || 0), 0);
     if (adsetRest > 0) {
-      campNode.adsets.push(unassignedNode({ level: 'adset', name: UNASSIGNED.adset, leads: adsetRest, features }));
+      // Zeitraum der betroffenen Leads bestimmen: die Zeile soll erklaeren,
+      // WARUM nicht zugeordnet wurde, statt nur eine Zahl zu zeigen.
+      const known = new Set([...c.adsets.values()].map((a) => pathKey('adset', { campaign: c.name, adset: a.name })));
+      const days = [];
+      for (const l of leads || []) {
+        if (l.sourceType !== 'paid') continue;
+        if (normKey(l.campaign) !== normKey(c.name)) continue;
+        if (known.has(pathKey('adset', l))) continue;
+        const d = (l.wonAt || '').slice(0, 10);
+        if (d) days.push(d);
+      }
+      days.sort();
+      campNode.adsets.push(unassignedNode({
+        level: 'adset', name: UNASSIGNED.adset, leads: adsetRest, features,
+        first: days[0] || null, last: days[days.length - 1] || null,
+      }));
     }
     result.push(campNode);
   }
