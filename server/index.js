@@ -130,6 +130,9 @@ async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
     // Die Frontend-relevanten Teile von project.config.json reisen im Payload
     // mit, damit Build und Laufzeit nicht auseinanderlaufen koennen.
     config: publicConfig(PROJECT),
+    // Hinweise aus dem Parser (z. B. nicht lesbare Zeilen). Gehoeren sichtbar
+    // ins Dashboard - fehlende Leads faellt sonst niemandem auf.
+    sheetWarnings: parsed.warnings || [],
     ...(FEATURES.hasQuality ? {
       scoring: {
         tiers: cfg.tiers,

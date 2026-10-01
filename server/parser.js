@@ -169,6 +169,16 @@ function toIsoText(v) {
   if (m) {
     return `${m[3]}-${pad2(m[2])}-${pad2(m[1])} ${pad2(m[4])}:${pad2(m[5])}:${pad2(m[6])}`;
   }
+
+  // Google-Serienzahl (Zelle ist als Zahl formatiert, z. B. "46296,38").
+  // Bewusst eng begrenzt auf ~2009-2064, damit Zaehl-/Summenzeilen wie "161"
+  // oder Betraege nicht faelschlich als Datum durchgehen.
+  const serial = Number(v.replace(',', '.'));
+  if (Number.isFinite(serial) && serial >= 40000 && serial <= 60000) {
+    const ms = Math.round((serial - 25569) * 86400 * 1000);
+    const d = new Date(ms);
+    if (!Number.isNaN(d.getTime())) return d.toISOString().replace('T', ' ').slice(0, 19);
+  }
   return null;
 }
 
@@ -199,6 +209,7 @@ function* iterateTables(rows, cfg = DEFAULT_CONFIG) {
   for (const row of rows) {
     const t = classifyHeader(row.map(norm).filter(Boolean).length >= 2 ? row : [], cfg);
     if (t) {
+      // Neue Kopfzeile -> vorige Tabelle abschliessen, neue beginnen.
       const prev = flush();
       if (prev) yield prev;
       header = row;
@@ -206,17 +217,14 @@ function* iterateTables(rows, cfg = DEFAULT_CONFIG) {
       body = [];
       continue;
     }
-    if (header) {
-      if (isEmptyRow(row)) {
-        const prev = flush();
-        if (prev) yield prev;
-        header = null;
-        type = null;
-        body = [];
-      } else {
-        body.push(row);
-      }
-    }
+    if (!header) continue;
+    // Leerzeilen beenden die Tabelle NICHT mehr. Frueher setzte die erste
+    // Leerzeile den Header zurueck - alles darunter wurde stillschweigend
+    // ignoriert. Eine einzige Luecke mitten im Tab konnte so hunderte Zeilen
+    // verschlucken, ohne Fehlermeldung. Gestapelte Tabellen bleiben trotzdem
+    // getrennt, weil jede ihre eigene Kopfzeile hat (siehe oben).
+    if (isEmptyRow(row)) continue;
+    body.push(row);
   }
   const last = flush();
   if (last) yield last;
@@ -378,6 +386,11 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
     const rows = sheet.values || [];
     // Der Tab bestimmt den Funnel – nicht der Kampagnenname.
     const funnel = funnelForTab(sheet.title, cfg);
+    // Zeilen mit Inhalt, die nicht gelesen werden konnten (meist unlesbares
+    // Datum). Frueher verschwanden die kommentarlos - genau die Sorte Fehler,
+    // die im Dashboard nicht auffaellt.
+    let skipped = 0;
+    let skippedExample = '';
     for (const table of iterateTables(rows, cfg)) {
       for (const row of table.body) {
         const o = rowToObj(table.header, row);
@@ -396,7 +409,14 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
           surveys.push({ ...r, funnel });
         } else if (table.type === 'leads') {
           const r = parseLeadRow(o, cfg);
-          if (r) leads.push({ ...r, funnel });
+          if (r) {
+            leads.push({ ...r, funnel });
+          } else if (row.filter((c) => norm(c)).length >= 3) {
+            // Nur Zeilen zaehlen, die wie ein echter Datensatz aussehen.
+            // Platzhalterzeilen (z. B. eine einzelne "0") sind kein Datenverlust.
+            skipped += 1;
+            if (!skippedExample) skippedExample = norm(row[0]) || '(leer)';
+          }
         } else if (table.type === 'tickets') {
           if (!hasTickets) continue;
           const r = parseTicketRow(o, cfg);
@@ -408,6 +428,16 @@ export function parseSheets(sheets, cfg = DEFAULT_CONFIG) {
           tickets.push({ ...r, funnel });
         }
       }
+    }
+    if (skipped > 0) {
+      warnings.push({
+        kind: 'unparsed-rows',
+        sheet: sheet.title,
+        count: skipped,
+        example: skippedExample,
+        message: `${skipped} Zeile(n) in „${sheet.title}" konnten nicht gelesen werden `
+          + `(unlesbares Datum, z. B. „${skippedExample}"). Diese Leads fehlen im Dashboard.`,
+      });
     }
   }
 

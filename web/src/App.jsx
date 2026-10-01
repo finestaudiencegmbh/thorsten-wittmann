@@ -256,6 +256,17 @@ export default function App() {
           </div>
         )}
 
+        {/* Nicht lesbare Sheet-Zeilen sichtbar machen: fehlende Leads fallen
+            sonst niemandem auf, das Dashboard sieht trotzdem plausibel aus. */}
+        {(data?.sheetWarnings || []).length > 0 && (
+          <div className="error-banner warn">
+            <strong>Hinweis zum Sheet:</strong>
+            <ul className="warn-list">
+              {data.sheetWarnings.map((w, i) => <li key={i}>{w.message}</li>)}
+            </ul>
+          </div>
+        )}
+
         {error && (
           <div className="error-banner">
             <strong>Fehler:</strong> {error}

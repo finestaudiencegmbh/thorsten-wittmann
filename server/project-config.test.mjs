@@ -358,6 +358,45 @@ assert.notEqual(rest.active, false, 'darf vom "nur aktive"-Filter nicht ausgeble
 assert.equal(rest.firstAt, '2026-09-29');
 assert.equal(rest.lastAt, '2026-09-29', 'alle unzugeordneten Leads stammen aus der Zeit vor der UTM-Umstellung');
 
+// --- 6i) Leerzeilen duerfen die Tabelle NICHT beenden ----------------------
+// Frueher setzte die erste Leerzeile den Header zurueck: alles darunter wurde
+// stillschweigend ignoriert. Eine einzige Luecke mitten im Tab konnte so
+// hunderte Zeilen verschlucken - ohne Fehlermeldung.
+const gapParsed = parseSheets([{ title: 'Leads CCC Webinar 10.10.26', values: [WEB_HEAD,
+  ['0', '', '', '', '', '', '', '', ''],
+  ['September 29 2026 22:33:00', 'Anne', '', 'anne@x.de', 'meta', 'ppc', WCAMP, '', ''],
+  ['', '', '', '', '', '', '', '', ''],                       // Leerzeile mittendrin
+  ['October 1 2026 09:12:00', 'Neu1', '', 'n1@x.de', 'meta', 'ppc', WCAMP, WAG, WAD],
+  ['October 1 2026 10:30:00', 'Neu2', '', 'n2@x.de', 'meta', 'ppc', WCAMP, WAG, WAD],
+] }], CFG);
+assert.equal(gapParsed.leads.length, 3, 'Zeilen NACH der Leerzeile werden weiter gelesen');
+assert.equal(gapParsed.leads.filter((l) => l.utm.term).length, 2, 'und behalten ihre UTM-Werte');
+
+// Gestapelte Tabellen bleiben trotzdem getrennt - jede hat ihre eigene Kopfzeile.
+const stacked = parseSheets([{ title: 'Leads CCC', values: [
+  ['Datum', 'Vorname', 'E-Mail', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'],
+  ['2026-09-01 10:00:00', 'A', 'a@x.de', 'meta', 'ppc', WCAMP, WAG, ''],
+  [],
+  ['Datum', 'Vorname', 'E-Mail', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'],
+  ['2026-09-02 10:00:00', 'B', 'b@x.de', 'meta', 'ppc', WCAMP, WAG, ''],
+] }], CFG);
+assert.equal(stacked.leads.length, 2);
+
+// Nicht lesbare Zeilen werden gemeldet statt verschwiegen
+const warned = parseSheets([{ title: 'Leads CCC Webinar 10.10.26', values: [WEB_HEAD,
+  ['0', '', '', '', '', '', '', '', ''],                      // Platzhalter -> keine Warnung
+  ['kaputtes datum', 'X', '', 'x@x.de', 'meta', 'ppc', WCAMP, WAG, WAD],
+] }], CFG);
+assert.equal(warned.leads.length, 0);
+assert.equal(warned.warnings.length, 1, 'genau eine Warnung');
+assert.equal(warned.warnings[0].count, 1, 'die Platzhalterzeile "0" zaehlt NICHT als Datenverlust');
+assert.match(warned.warnings[0].message, /nicht gelesen/);
+
+// Google-Serienzahl als Datum (Zelle als Zahl formatiert)
+assert.match(_internal.parseDate('46296'), /^2026-10-01/);
+assert.equal(_internal.parseDate('161'), null, 'Zaehlzeile bleibt kein Datum');
+assert.equal(_internal.parseDate('1030.11'), null, 'Betrag bleibt kein Datum');
+
 // --- 7) Funnel-Ansicht in combine ------------------------------------------
 const meta = {
   entities: [
