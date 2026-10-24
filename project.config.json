@@ -26,6 +26,22 @@
       "match": [
         "akd"
       ]
+    },
+    {
+      "id": "FCO",
+      "label": "FCO",
+      "sheetTab": "fco",
+      "match": [
+        "fco"
+      ]
+    },
+    {
+      "id": "RRC",
+      "label": "RRC",
+      "sheetTab": "rrc",
+      "match": [
+        "rrc"
+      ]
     }
   ],
   "sheet": {
@@ -123,9 +139,9 @@
     },
     "ignoreBefore": [
       {
-        "sheetTab": "webinar",
+        "sheetTab": "ccc webinar",
         "date": "2026-10-01",
-        "reason": "Vollstaendige UTMs (utm_term/utm_content) erst ab 01.10.2026. Davor nur Kampagnenname - halbe Zuordnung verzerrt den AG-CPL mehr, als sie nuetzt."
+        "reason": "Vollstaendige UTMs (utm_term/utm_content) erst ab 01.10.2026. Davor nur Kampagnenname - halbe Zuordnung verzerrt den AG-CPL mehr, als sie nuetzt. Gilt NUR fuer die CCC-Webinar-Tabs: vorher stand hier \"webinar\", das traf auch jeden neuen Webinar-Tab (FCO, RRC) und hat dort Leads verschluckt."
       }
     ]
   },
@@ -165,7 +181,8 @@
   "quality": {
     "_comment": "Nur Kampagnen, deren Name eines dieser Muster enthaelt, fuehren eine Umfrage. Andere Kampagnen zeigen bei Qualitaets-Kennzahlen bewusst nichts statt 0.",
     "campaignMatch": [
-      "ccc202610"
+      "ccc202610",
+      "rrc202610"
     ]
   }
 }

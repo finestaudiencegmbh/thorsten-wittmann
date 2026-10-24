@@ -525,6 +525,50 @@ assert.deepEqual(pub.features, { hasTickets: false, hasQuality: false });
 assert.deepEqual(pub.funnels.map((f) => f.id), ['CCC', 'AKD']);
 assert.ok(!('sheet' in pub), 'Sheet-Interna gehen nicht ans Frontend');
 
+// --- 9) Live-Config gegen die echten Tab-Namen im Sheet --------------------
+// Jeder neue Reiter im Sheet muss genau einem Funnel zufallen - sonst landen
+// seine Leads nur im Hauptdashboard und in keinem Unterreiter. Und der
+// Stichtag darf nur die Tabs treffen, fuer die er gedacht war.
+const LIVE_TABS = [
+  ['Leads CCC', 'CCC', null],
+  ['Leads AKD', 'AKD', null],
+  ['Leads CCC Webinar 10.10.26', 'CCC', '2026-10-01'],
+  ['Umfrage CCC Webinar 10.10.26', 'CCC', '2026-10-01'],
+  ['Leads FCO Webinar Evergreen', 'FCO', null],
+  ['Leads RRC Webinar 30.10.26', 'RRC', null],
+  ['Umfrage RRC Webinar 31.10.26', 'RRC', null],
+  ['CJ Auswertung', null, null],
+  ['CJ Kunden', null, null],
+];
+for (const [title, funnel, cutoff] of LIVE_TABS) {
+  assert.equal(funnelForTab(title, live), funnel, `Funnel fuer Tab "${title}"`);
+  assert.equal(_internal.cutoffForTab(title, live), cutoff, `Stichtag fuer Tab "${title}"`);
+}
+
+// Und die Gegenrichtung: der Meta-Spend findet seinen Funnel ueber den
+// Kampagnennamen. Beispiele aus dem echten Werbekonto.
+const LIVE_CAMPAIGNS = [
+  ['DP FCO EWeb | ABO | Lead | 22.10.2026', 'FCO'],
+  ['DP | rrc202610 | CBO | Leads 161026', 'RRC'],
+  ['DP | ccc202610 | ABO Interest Stack | Leads', 'CCC'],
+  ['DP+|+AKD+|+ABO+Leads+|+190826', 'AKD'],
+];
+for (const [name, expected] of LIVE_CAMPAIGNS) {
+  const one = {
+    entities: [{ campaignId: 'x', campaign: name, adsetId: 'xa', adset: 'AG', adId: 'xad',
+      creative: 'C', spend: 1, impressions: 1, clicks: 1, cpm: 1, uniqueOutboundClicks: 1 }],
+    daily: [{ date: '2026-10-22', spend: 1, impressions: 1, clicks: 1 }],
+    dailyEntities: [{ date: '2026-10-22', campaign: name, adset: 'AG', creative: 'C',
+      spend: 1, impressions: 1, clicks: 1, uoc: 1 }],
+    campaignStatus: { [name]: { status: 'ACTIVE', active: true, objective: 'OUTCOME_LEADS' } },
+    adsetStatus: {}, adStatus: {}, adList: [],
+  };
+  const hit = (live.funnels || [])
+    .filter((f) => combineMetaWithLeads(one, [], { features, funnel: f }).totals.spend === 1)
+    .map((f) => f.id);
+  assert.deepEqual(hit, [expected], `Kampagne "${name}" gehoert zu genau einem Funnel`);
+}
+
 console.log('✓ Alle Projekt-Config-/Flag-/Funnel-Tests bestanden');
 console.log(`  Leads: ${ds.counts.leads} (${ds.counts.paidLeads} Meta · ${ds.counts.otherPaidLeads} Google · ${ds.counts.organicLeads} organisch)`);
 console.log(`  Funnels: CCC ${ccc.totals.spend} € · AKD ${akd.totals.spend} € · gesamt ${all.totals.spend} €`);
