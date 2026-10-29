@@ -31,9 +31,24 @@ deployen. Kein Code-Fork nötig.
   "funnels": [ /* siehe Abschnitt 3 – leere Liste = ein einzelner Funnel */ ],
 
   "sheet": { /* siehe Abschnitt 2 */ },
-  "trafficSources": [ /* siehe Abschnitt 4 */ ]
+  "trafficSources": [ /* siehe Abschnitt 4 */ ],
+
+  "defaults": {
+    "range": "thisMonth"                    // Zeitraum beim Öffnen – siehe unten
+  }
 }
 ```
+
+### Voreingestellter Zeitraum: `defaults.range`
+
+Der Zeitraum wird an die Meta-API durchgereicht. Ohne Zeitraum (`"maximum"`)
+greift der Standard-Lookback von 90 Tagen, und die teuerste Abfrage
+(Tageswerte × Kampagne × Anzeigengruppe × Anzeige) wird entsprechend gross.
+Ein enger Default laedt spuerbar schneller.
+
+Erlaubt sind die Preset-Schluessel aus dem Kalender: `maximum`, `today`,
+`yesterday`, `last7`, `last14`, `last28`, `last30`, `thisWeek`, `lastWeek`,
+`thisMonth`, `lastMonth`. Fehlt der Schluessel, gilt `maximum`.
 
 ### Die zwei Feature-Flags
 

@@ -12,6 +12,7 @@ import DateRangePicker from './components/DateRangePicker.jsx';
 import SourcesView from './components/SourcesView.jsx';
 import QualityView from './components/QualityView.jsx';
 import ChatBot from './components/ChatBot.jsx';
+import LoadingBar from './components/LoadingBar.jsx';
 import { fmtEur, fmtInt } from './lib.js';
 import { PROJECT, BRANDING, FUNNELS, TRAFFIC_SOURCES, DEFAULT_RANGE, hasFunnels, hasTickets, hasQuality, applyBranding } from './config.js';
 import { presetYmd } from './dates.js';
@@ -52,6 +53,9 @@ export default function App() {
   const [tab, setTab] = useState('campaign');
   const [view, setView] = useState('dashboard');
   const [funnel, setFunnel] = useState('');
+  // Echter Ladefortschritt vom Server (siehe server/progress.js).
+  const [progress, setProgress] = useState(null);
+  const [loadStartedAt, setLoadStartedAt] = useState(() => Date.now());
 
   // Akzentfarbe/Flaechenton aus project.config.json in die CSS-Variablen.
   useEffect(() => { applyBranding(BRANDING); }, []);
@@ -60,8 +64,10 @@ export default function App() {
   const load = async (refresh = false, r = range) => {
     setLoading(true);
     setError(null);
+    setProgress(null);
+    setLoadStartedAt(Date.now());
     try {
-      setData(await fetchData({ refresh, from: r.from, to: r.to }));
+      setData(await fetchData({ refresh, from: r.from, to: r.to, onProgress: setProgress }));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -188,7 +194,7 @@ export default function App() {
     if (idx >= 0 && idx < DRILL_ORDER.length - 1) setTab(DRILL_ORDER[idx + 1]);
   };
 
-  if (loading && !data) return <div className="loader">Lade Daten…</div>;
+  if (loading && !data) return <LoadingBar progress={progress} startedAt={loadStartedAt} />;
 
   return (
     <div className="layout">

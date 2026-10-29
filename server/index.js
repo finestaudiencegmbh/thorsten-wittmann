@@ -10,10 +10,11 @@ import { buildDataset } from './build.js';
 import { loadScoringConfig } from './scoring.js';
 import { getSampleParsed } from './sample-data.js';
 import { isSupermetricsConfigured, fetchFbInsights, aggregateFb } from './supermetrics.js';
-import { isMetaConfigured, fetchMetaAll } from './meta.js';
+import { isMetaConfigured, fetchMetaAll, metaStepCount } from './meta.js';
 import { combineMetaWithLeads } from './combine.js';
 import { isChatConfigured, buildContext, chat } from './chat.js';
 import { loadProjectConfig, publicConfig } from './project-config.js';
+import { startJob, getJob } from './progress.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -52,24 +53,46 @@ if (AUTH_USER && AUTH_PASS) {
 // --- Daten-Cache (je Zeitraum) ---------------------------------------------
 const cache = new Map(); // key -> { at, payload }
 
-async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
+async function loadDataset({ refresh = false, from = '', to = '', job = '' } = {}) {
   const key = `${from}|${to}`;
+  const report = startJob(job, { label: 'Sheet laden' });
   const hit = cache.get(key);
   if (!refresh && hit && Date.now() - hit.at < CACHE_TTL) {
+    report.done();
     return hit.payload;
   }
+  try {
+    return await buildPayload({ from, to, key, report });
+  } catch (err) {
+    report.fail(err.message);
+    throw err;
+  }
+}
+
+async function buildPayload({ from, to, key, report }) {
+  // Der gesamte Ablauf wird VORHER angemeldet. Alles andere liesse den Balken
+  // zurueckspringen, sobald die Meta-Schritte dazukommen (33 % -> 19 %).
+  // Moeglich ist das, weil die Zahl der Werbekonten und Funnels aus der
+  // Konfiguration kommt und keinen API-Call braucht.
+  const metaSteps = isMetaConfigured() ? metaStepCount() + FUNNELS.length : 0;
+  report.plan(3 + metaSteps + (!isMetaConfigured() && isSupermetricsConfigured() ? 1 : 0));
   const cfg = loadScoringConfig();
   let parsed;
   let source;
   if (isConfigured()) {
     const sheets = await fetchAllSheets();
+    report.step('Zeilen lesen');
     parsed = parseSheets(sheets, PROJECT);
+    report.step('Leads aufbereiten');
     source = 'google';
   } else {
+    report.step('Beispieldaten lesen');
     parsed = getSampleParsed(PROJECT);
+    report.step('Leads aufbereiten');
     source = 'demo';
   }
   const dataset = buildDataset(parsed, cfg, PROJECT);
+  report.step('Werbedaten abrufen');
 
   // Facebook-Ads-Daten: bevorzugt direkt über die Meta Marketing API,
   // alternativ über Supermetrics. Fehler hier dürfen das Sheet-Dashboard
@@ -80,7 +103,7 @@ async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
   let fb = { configured: metaOn || smOn, provider: metaOn ? 'meta' : smOn ? 'supermetrics' : null, error: null, totals: null, byDim: null, rows: 0, hierarchy: null, daily: null };
   if (metaOn) {
     try {
-      const all = await fetchMetaAll(range);
+      const all = await fetchMetaAll(range, report);
       const agg = aggregateFb(all.records);
       // Leads für denselben Zeitraum, damit FB-Hierarchie & Leads konsistent sind
       const leadsInRange = filterLeadsByRange(dataset.leads, from, to);
@@ -106,6 +129,7 @@ async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
           dailyByEntity: c.dailyByEntity, intradayByEntity: c.intradayByEntity, intradayDay: c.intradayDay,
           leads: leadsInRange.filter((l) => l.funnel === f.id).length,
         };
+        report.step(`Funnel ${f.label || f.id} auswerten`);
       }
       fb = { configured: true, provider: 'meta', error: null, fetchedAt: new Date().toISOString(), ...agg, funnels: funnelViews, hierarchy: combined.hierarchy, daily: combined.daily, totals: combined.totals, nonLeadCampaigns: combined.nonLeadCampaigns, uocByDim: combined.uocByDim, dimMeta: combined.dimMeta, dailyByEntity: combined.dailyByEntity, intradayByEntity: combined.intradayByEntity, intradayDay: combined.intradayDay, accounts: all.accounts, accountsRequested: all.accountsRequested, accountErrors: all.accountErrors };
     } catch (err) {
@@ -115,6 +139,7 @@ async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
   } else if (smOn) {
     try {
       const records = await fetchFbInsights();
+      report.step('Werbedaten aufbereiten');
       const agg = aggregateFb(records);
       fb = { configured: true, provider: 'supermetrics', error: null, fetchedAt: new Date().toISOString(), ...agg };
     } catch (err) {
@@ -146,6 +171,7 @@ async function loadDataset({ refresh = false, from = '', to = '' } = {}) {
     ...dataset,
   };
   cache.set(key, { at: Date.now(), payload });
+  report.done();
   return payload;
 }
 
@@ -167,13 +193,22 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, configured: isConfigured(), mode: isConfigured() ? 'google' : 'demo' });
 });
 
+// Fortschritt eines laufenden /api/data-Abrufs. Der Client pollt das
+// waehrend des langen Requests - ohne den Abruf selbst zu beeinflussen.
+app.get('/api/progress', (req, res) => {
+  const id = String(req.query.job || '').slice(0, 64);
+  res.set('Cache-Control', 'no-store');
+  res.json(getJob(id) || { unknown: true });
+});
+
 app.get('/api/data', async (req, res) => {
   try {
     const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
     const isYmd = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
     const from = isYmd(req.query.from) ? req.query.from : '';
     const to = isYmd(req.query.to) ? req.query.to : '';
-    const payload = await loadDataset({ refresh, from, to });
+    const job = String(req.query.job || '').slice(0, 64);
+    const payload = await loadDataset({ refresh, from, to, job });
     res.json(payload);
   } catch (err) {
     console.error('Fehler beim Laden der Daten:', err);

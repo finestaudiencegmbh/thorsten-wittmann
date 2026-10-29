@@ -258,30 +258,50 @@ async function fetchStatus(c) {
   return { campaignStatus, adsetStatus, adStatus, adList };
 }
 
+/**
+ * Wie viele Fortschritts-Schritte der Meta-Abruf melden wird: sechs Abrufe je
+ * Werbekonto plus einen fuers Zusammenfuehren. Steht ohne einen einzigen
+ * API-Call fest, weil die Konten aus der Konfiguration kommen.
+ */
+export function metaStepCount() {
+  return isMetaConfigured() ? accountIds().length * 6 + 1 : 0;
+}
+
 /** Holt alle Meta-Daten in einem Rutsch – über EIN oder MEHRERE Werbekonten
  * (META_AD_ACCOUNT_ID kommagetrennt). Die Ergebnisse werden zusammengeführt:
  * Records/Entities/Tages-Entitäten aneinandergehängt, Konto-Tagesspend je Datum
  * summiert, Status-Maps gemerged. Optional mit explizitem Zeitraum. */
-export async function fetchMetaAll(customRange) {
+export async function fetchMetaAll(customRange, progress = null) {
   if (!isMetaConfigured()) return null;
   const base = cfg();
   const range = customRange?.since && customRange?.until ? customRange : dateRange(base.lookback);
   const ids = accountIds();
 
+  // Angemeldet werden die Schritte vom Aufrufer (metaStepCount), BEVOR der
+  // Abruf startet - sonst waechst das Ziel mittendrin und der Balken springt
+  // zurueck.
+  const report = progress || { plan() {}, step() {}, say() {} };
+  // Die sechs Abrufe laufen parallel, fertig werden sie in beliebiger
+  // Reihenfolge. Das Label nennt deshalb den zuletzt FERTIGEN Abruf.
+  const tick = (i, what) => report.step(
+    `Meta ${ids.length > 1 ? `Konto ${i + 1}/${ids.length}: ` : ''}${what}`,
+  );
+
   // Pro Konto alles parallel holen. Schlägt EIN Konto fehl, wird es übersprungen
   // (Warnung im Log), damit die übrigen Konten trotzdem angezeigt werden.
   const accountErrors = [];
   const perAccount = (await Promise.all(
-    ids.map(async (account) => {
+    ids.map(async (account, i) => {
       try {
         const c = { ...base, account };
         const [records, entities, daily, dailyEntities, status, name] = await Promise.all([
-          fetchPlacementRecords(c, range),
-          fetchEntities(c, range),
-          fetchDaily(c, range),
-          fetchDailyEntities(c, range).catch(() => []),
-          fetchStatus(c).catch(() => ({ campaignStatus: {}, adsetStatus: {}, adStatus: {} })),
-          fetchAccountName(c).catch(() => account),
+          fetchPlacementRecords(c, range).then((r) => (tick(i, 'Placements'), r)),
+          fetchEntities(c, range).then((r) => (tick(i, 'Kampagnen & Anzeigen'), r)),
+          fetchDaily(c, range).then((r) => (tick(i, 'Tageswerte'), r)),
+          fetchDailyEntities(c, range).catch(() => []).then((r) => (tick(i, 'Tageswerte je Anzeige'), r)),
+          fetchStatus(c).catch(() => ({ campaignStatus: {}, adsetStatus: {}, adStatus: {} }))
+            .then((r) => (tick(i, 'Status'), r)),
+          fetchAccountName(c).catch(() => account).then((r) => (tick(i, 'Kontoname'), r)),
         ]);
         // Entities mit ihrem Werbekonto markieren (für die optische Trennung)
         return { account, name, records, entities: entities.map((e) => ({ ...e, account })), daily, dailyEntities, status };
@@ -299,6 +319,7 @@ export async function fetchMetaAll(customRange) {
   }
 
   // Zusammenführen
+  report.step('Meta-Daten zusammenführen');
   const records = perAccount.flatMap((a) => a.records);
   const entities = perAccount.flatMap((a) => a.entities);
   const dailyEntities = perAccount.flatMap((a) => a.dailyEntities);
