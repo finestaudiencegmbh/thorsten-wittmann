@@ -2,8 +2,9 @@
   "name": "Thorsten Wittmann Scaling",
   "subtitle": "Lead- & Kampagnen-Dashboard",
   "branding": {
-    "accent": "#f79800",
-    "surface": "#163358",
+    "accent": "#e4c139",
+    "surface": "#0b1a2e",
+    "background": "#0a0a0a",
     "logo": ""
   },
   "features": {

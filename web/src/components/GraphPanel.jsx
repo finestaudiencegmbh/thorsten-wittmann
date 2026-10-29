@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { GlowDefs, useChartIds } from './ChartGlow.jsx';
 import { fmtEur, fmtEur2, fmtInt, fmtPct, fmtScore } from '../lib.js';
 import { hasTickets, hasQuality } from '../config.js';
 
@@ -173,6 +174,7 @@ export default function GraphPanel({ title, levelLabel, series, hourly = false, 
 /** SVG-Chart mit pro Serie eigener Skala (Normalisierung auf eigenes Max). */
 function OverlayChart({ series, hourly = false }) {
   const [hover, setHover] = useState(null);
+  const ids = useChartIds();
   const fmtX = hourly ? fmtHourLabel : fmtDay;
 
   const model = useMemo(() => {
@@ -237,16 +239,17 @@ function OverlayChart({ series, hourly = false }) {
           onTouchStart={(e) => e.touches[0] && pick(e.touches[0].clientX, e.currentTarget)}
           onTouchMove={(e) => e.touches[0] && pick(e.touches[0].clientX, e.currentTarget)}
           style={{ touchAction: 'pan-y' }}>
+          <GlowDefs ids={ids} w={w} h={h} />
           {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
             const yy = pad.t + plotH - f * plotH;
             return <line key={i} x1={pad.l} y1={yy} x2={w - pad.r} y2={yy} className="chart-grid" />;
           })}
           {prepared.map((s) => (
-            <path key={s.key} d={pathFor(s.pts)} fill="none" stroke={s.color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+            <path key={s.key} d={pathFor(s.pts)} fill="none" stroke={s.color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" filter={`url(#${ids.glow})`} />
           ))}
           {hover != null && <line x1={x(hover)} y1={pad.t} x2={x(hover)} y2={pad.t + plotH} className="chart-hover-line" />}
           {hover != null && prepared.map((s) => s.pts[hover] && (
-            <circle key={s.key} cx={s.pts[hover].x} cy={s.pts[hover].y} r="4" fill={s.color} stroke="#0b0b14" strokeWidth="1.5" />
+            <circle key={s.key} cx={s.pts[hover].x} cy={s.pts[hover].y} r="4" fill={s.color} strokeWidth="1.5" style={{ stroke: 'var(--bg-2)' }} filter={`url(#${ids.glow})`} />
           ))}
           {Array.from({ length: 5 }, (_, k) => Math.round((k * (dates.length - 1)) / 4)).filter((v, i, a) => a.indexOf(v) === i).map((i) => (
             <text key={i} x={x(i)} y={h - 8} className="chart-axis" textAnchor="middle">{fmtX(dates[i])}</text>

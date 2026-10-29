@@ -87,32 +87,76 @@ const rgba = (hex, a) => {
  * Setzt die CSS-Custom-Properties aus der Config. styles.css definiert die
  * Fallback-Werte; hier werden sie zur Laufzeit ueberschrieben.
  */
+/** Relative Helligkeit nach WCAG (0 = schwarz, 1 = weiss). */
+function luminance(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const lin = [r, g, b].map((c) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+}
+
+const rgbList = (hex) => { const { r, g, b } = hexToRgb(hex); return `${r}, ${g}, ${b}`; };
+/** Mischt Richtung Weiss/Schwarz und liefert die Kanaele als "r, g, b". */
+const shadeList = (hex, amount) => rgbList(shade(hex, amount));
+
 export function applyBranding(branding = BRANDING) {
   const accent = branding.accent || '#d0bb5a';
   const surface = branding.surface || '';
+  const background = branding.background || '';
   const root = document.documentElement;
   const set = (k, v) => root.style.setProperty(k, v);
 
+  // --- Akzent -------------------------------------------------------------
+  // --accent-rgb traegt das halbe Theme: styles.css baut daraus jede Linie,
+  // jeden Glow und jede getoente Flaeche.
+  set('--accent-rgb', rgbList(accent));
   set('--accent', accent);
-  set('--accent-2', shade(accent, 0.28));
+  set('--accent-2', shade(accent, 0.34));
   set('--accent-deep', shade(accent, -0.28));
-  set('--accent-hover', shade(accent, 0.28));
+  set('--accent-hover', shade(accent, 0.34));
+  set('--accent-ink', shade(accent, 0.46));
   set('--accent-soft', rgba(accent, 0.14));
-  set('--accent-ink', shade(accent, 0.42));
   set('--line', rgba(accent, 0.12));
   set('--line-strong', rgba(accent, 0.26));
   set('--glow', `0 0 0 1px ${rgba(accent, 0.3)}, 0 10px 44px ${rgba(accent, 0.18)}`);
+  set('--accent-grad', 'linear-gradient(135deg, var(--accent-2), var(--accent) 55%, var(--accent-deep))');
+  // Text auf Akzentflaechen (Buttons, aktive Tabs): dunkel auf hellen
+  // Akzenten wie Gold, weiss auf kraeftigen wie Rot oder Blau. Vorher war das
+  // fest auf dunkel verdrahtet - auf einem dunklen Akzent unlesbar.
+  set('--on-accent', luminance(accent) > 0.45 ? '#141005' : '#ffffff');
 
-  // Zweite CI-Farbe als Flaechenton: hebt Panels vom Hintergrund ab, ohne
-  // dem Akzent Konkurrenz zu machen.
-  if (surface) {
-    set('--panel', rgba(surface, 0.42));
-    set('--panel-solid', shade(surface, -0.45));
-    set('--bg-elevated', shade(surface, -0.55));
-    set('--bg-2', shade(surface, -0.72));
-    set('--bg', shade(surface, -0.82));
+  // --- Hintergrund --------------------------------------------------------
+  // Die Seite selbst. --deep-rgb ist der vertiefte Ton darunter (Eingabe-
+  // felder, Anzeigenzeilen), damit sie sich vom Panel abheben.
+  if (background) {
+    set('--bg', background);
+    set('--bg-rgb', rgbList(background));
+    set('--deep-rgb', shadeList(background, -0.5));
+    set('--bg-2', shade(background, 0.02));
   }
-  set('--brand-accent-rgb', (({ r, g, b }) => `${r}, ${g}, ${b}`)(hexToRgb(accent)));
+
+  // --- Flaechenton --------------------------------------------------------
+  // Die zweite CI-Farbe traegt die erhabenen Flaechen (Karten, Sidebar,
+  // Topbar). Ohne eigenen Hintergrund faerbt sie wie bisher auch die Seite,
+  // damit bestehende Configs sich nicht veraendern.
+  if (surface) {
+    set('--panel-rgb', shadeList(surface, -0.28));
+    set('--panel', rgba(shade(surface, -0.28), 0.72));
+    set('--panel-solid', shade(surface, -0.28));
+    set('--bg-elevated', shade(surface, -0.45));
+    if (!background) {
+      set('--bg-2', shade(surface, -0.72));
+      set('--bg', shade(surface, -0.82));
+      set('--bg-rgb', shadeList(surface, -0.82));
+      set('--deep-rgb', shadeList(surface, -0.9));
+    }
+  }
+
+  // Adressleiste auf Mobilgeraeten mitfaerben.
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', background || shade(surface || accent, -0.82));
 }
 
-export const _internal = { shade, rgba, hexToRgb };
+export const _internal = { shade, rgba, hexToRgb, luminance };

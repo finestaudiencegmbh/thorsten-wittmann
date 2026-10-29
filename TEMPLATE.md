@@ -18,8 +18,9 @@ deployen. Kein Code-Fork nötig.
   "subtitle": "Lead-Dashboard",             // Zeile darunter
 
   "branding": {
-    "accent": "#f79800",                    // EINE Farbe – alle Abstufungen werden daraus berechnet
-    "surface": "#163358",                   // optionaler zweiter Ton für Panels/Hintergrund ("" = Standard-Dunkel)
+    "accent": "#e4c139",                    // CTA-/Akzentfarbe – alle Abstufungen, Linien und Glows daraus
+    "surface": "#0b1a2e",                   // Flächenton: Karten, Sidebar, Topbar ("" = Standard-Dunkel)
+    "background": "#0a0a0a",                // Seitenhintergrund ("" = aus surface abgeleitet)
     "logo": "/logo.svg"
   },
 
@@ -49,6 +50,23 @@ Ein enger Default laedt spuerbar schneller.
 Erlaubt sind die Preset-Schluessel aus dem Kalender: `maximum`, `today`,
 `yesterday`, `last7`, `last14`, `last28`, `last30`, `thisWeek`, `lastWeek`,
 `thisMonth`, `lastMonth`. Fehlt der Schluessel, gilt `maximum`.
+
+### Die drei Branding-Farben
+
+`styles.css` setzt **keine** Farbe mehr fest ein. Jede Linie, jeder Glow und
+jede getönte Fläche wird aus `--accent-rgb`, `--bg-rgb`, `--deep-rgb` und
+`--panel-rgb` gebaut, die `applyBranding()` aus diesen drei Werten ableitet.
+Eine Farbe ändern färbt also das ganze Theme um.
+
+| Schlüssel | Trägt |
+| --- | --- |
+| `accent` | Buttons, aktive Tabs/Navigation, Linien, Glow, Hover-Zustände |
+| `surface` | Erhabene Flächen: Karten, Panels, Sidebar, Topbar |
+| `background` | Die Seite selbst; daraus auch der vertiefte Ton für Eingabefelder |
+
+Die Textfarbe auf Akzentflächen (`--on-accent`) wird aus der Helligkeit der
+Akzentfarbe berechnet: dunkel auf Gold oder Gelb, weiß auf kräftigem Rot oder
+Blau. Ein dunkler Akzent macht die Buttons also nicht unlesbar.
 
 ### Die zwei Feature-Flags
 
