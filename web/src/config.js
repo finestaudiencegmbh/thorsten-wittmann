@@ -15,6 +15,13 @@ export const BRANDING = PROJECT.branding || {};
 export const FUNNELS = PROJECT.funnels || [];
 export const TRAFFIC_SOURCES = PROJECT.trafficSources || [];
 
+/**
+ * Zeitraum beim Oeffnen des Dashboards (Preset-Schluessel aus dem Kalender).
+ * Ein enger Zeitraum laedt schneller: die Meta-API liefert dann nur die
+ * gewaehlten Tage statt der vollen 90 Tage Lookback.
+ */
+export const DEFAULT_RANGE = PROJECT.defaults?.range || 'maximum';
+
 export const hasTickets = Boolean(FEATURES.hasTickets);
 export const hasQuality = Boolean(FEATURES.hasQuality);
 export const hasFunnels = FUNNELS.length > 0;

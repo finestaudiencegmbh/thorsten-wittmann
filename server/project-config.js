@@ -118,6 +118,15 @@ export const DEFAULT_CONFIG = {
   // Zusätzliche Aufschlüsselung bezahlter Quellen (z. B. Meta vs. Google).
   // Leer = altes Verhalten (nur bezahlt/organisch).
   trafficSources: [],
+  // Voreinstellungen der Oberfläche.
+  defaults: {
+    // Zeitraum beim Öffnen des Dashboards. Einer der Presets im Kalender:
+    // maximum | today | yesterday | last7 | last14 | last28 | last30 |
+    // thisWeek | lastWeek | thisMonth | lastMonth.
+    // "maximum" laedt den vollen Meta-Lookback (90 Tage) - korrekt, aber
+    // spuerbar langsamer als ein enger Zeitraum.
+    range: 'maximum',
+  },
 };
 
 /** Flache Merge-Strategie pro Ebene: Objekte werden vertieft, Arrays ersetzt. */
@@ -161,5 +170,6 @@ export function publicConfig(cfg) {
     utmMapping: (cfg.sheet || {}).utmMapping || {},
     quality: cfg.quality || {},
     trafficSources: (cfg.trafficSources || []).map((s) => ({ id: s.id, label: s.label || s.id, paid: s.paid !== false, hasSpend: Boolean(s.hasSpend) })),
+    defaults: cfg.defaults || {},
   };
 }

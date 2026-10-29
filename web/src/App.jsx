@@ -13,7 +13,8 @@ import SourcesView from './components/SourcesView.jsx';
 import QualityView from './components/QualityView.jsx';
 import ChatBot from './components/ChatBot.jsx';
 import { fmtEur, fmtInt } from './lib.js';
-import { PROJECT, BRANDING, FUNNELS, TRAFFIC_SOURCES, hasFunnels, hasTickets, hasQuality, applyBranding } from './config.js';
+import { PROJECT, BRANDING, FUNNELS, TRAFFIC_SOURCES, DEFAULT_RANGE, hasFunnels, hasTickets, hasQuality, applyBranding } from './config.js';
+import { presetYmd } from './dates.js';
 
 const NAV = [
   { key: 'dashboard', label: 'Dashboard', icon: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z' },
@@ -23,9 +24,13 @@ const NAV = [
   { key: 'sources', label: 'Quellen', icon: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 0v10l7 3' },
 ];
 
+// Zeitraum beim Start. Steuert sowohl den Meta-Abruf auf dem Server als auch
+// die Lead-Filterung im Client - deshalb an beiden Stellen derselbe Wert.
+const INITIAL_RANGE = presetYmd(DEFAULT_RANGE);
+
 const EMPTY_FILTERS = {
   search: '', sourceType: 'all', campaign: '', adset: '', creative: '', placement: '',
-  income: '', realEstate: '', employment: '', from: '', to: '', onlyTickets: false, tiers: [],
+  income: '', realEstate: '', employment: '', from: INITIAL_RANGE.from, to: INITIAL_RANGE.to, onlyTickets: false, tiers: [],
   funnel: '',
 };
 
@@ -43,7 +48,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const [range, setRange] = useState({ from: '', to: '' });
+  const [range, setRange] = useState(INITIAL_RANGE);
   const [tab, setTab] = useState('campaign');
   const [view, setView] = useState('dashboard');
   const [funnel, setFunnel] = useState('');

@@ -184,5 +184,9 @@
       "ccc202610",
       "rrc202610"
     ]
+  },
+  "defaults": {
+    "_comment": "Zeitraum beim Oeffnen des Dashboards. Preset-Schluessel aus dem Kalender. Ein enger Zeitraum laedt deutlich schneller, weil die Meta-API nur die gewaehlten Tage liefern muss statt der vollen 90 Tage Lookback.",
+    "range": "thisMonth"
   }
 }

@@ -1,35 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-// ---- Datums-Helfer (lokale Zeit, ohne Bibliothek) --------------------------
-const pad = (n) => String(n).padStart(2, '0');
-const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const parse = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
-const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-const startOfWeek = (d) => { const x = new Date(d); const wd = (x.getDay() + 6) % 7; return addDays(x, -wd); }; // Mo
-const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
-const endOfMonth = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0);
+import { ymd, parse, addDays, startOfMonth, endOfMonth, presetRange } from '../dates.js';
 
 const fmtDE = (s) => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${d}.${m}.${y}`; };
-
-/** Liefert {from,to} für ein Preset relativ zu heute. */
-function presetRange(key) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const y = addDays(today, -1);
-  switch (key) {
-    case 'today': return [today, today];
-    case 'yesterday': return [y, y];
-    case 'last7': return [addDays(today, -6), today];
-    case 'last14': return [addDays(today, -13), today];
-    case 'last28': return [addDays(today, -27), today];
-    case 'last30': return [addDays(today, -29), today];
-    case 'thisWeek': return [startOfWeek(today), today];
-    case 'lastWeek': { const s = addDays(startOfWeek(today), -7); return [s, addDays(s, 6)]; }
-    case 'thisMonth': return [startOfMonth(today), today];
-    case 'lastMonth': { const s = startOfMonth(addDays(startOfMonth(today), -1)); return [s, endOfMonth(s)]; }
-    case 'maximum': return [null, null];
-    default: return [null, null];
-  }
-}
 
 const PRESETS = [
   { key: 'maximum', label: 'Maximum' },
